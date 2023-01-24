@@ -28,7 +28,7 @@ header-includes:
 # {.tabset}
 ## Package Loading and Data Importing
 ### Load Packages and Custom Functions
-```{r, package-loading, message=FALSE, warningT=FALSE}
+```{r, package-loading, message=FALSE, warning=FALSE}
 # BiocManager::install("mixOmicsTeam/mixOmics")
 # remotes::install_github("ying14/yingtools2")
 # remotes::install_github("mikabr/ggpirate")
@@ -113,7 +113,8 @@ source("./Data/run_lefse2.R")
 ## Import Data
 ### Load in all Metagenomic, Metabolomic and Clinical Data
 ```{r, load-in-data, message=FALSE, warning=FALSE}
-# 1) Load R image load('./Data/LT_Modeling.RData')
+# 1) Load R image 
+# load('./Data/LT_Modeling.RData')
 
 # OR #
 
@@ -594,7 +595,7 @@ embedding_df = tu.df_embedding
 ```
 
 ### Figure 1: Shotgun Metagenomics, taxUMAP and Diversity 
-```{r, figure-1-relative-abundance-umap-alpha-diversity, fig.dim = c(16, 12), warning=FALSE, message=FALSE}
+```{r, figure-1-relative-abundance-umap-alpha-diversity, fig.dim = c(18, 14), warning=FALSE, message=FALSE}
 #### Alpha Diversity ####
 # Alpha diversity matrix: Inverse Simpson
 alpha_invsim <- vegan::diversity(t_metaphlan_mat, index = "invsimpson") %>%
