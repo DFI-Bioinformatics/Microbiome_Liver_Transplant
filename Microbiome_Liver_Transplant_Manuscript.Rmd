@@ -518,7 +518,7 @@ pirate_colors <- c("#1A49BE", "#3A001E")
 pirate_colors2 <- c("#3A001E", "#3A001E", "#3A001E", "#1A49BE")
 
 t_metaphlan <- metaphlan_df %>%
-  filter(sampleID %in% first_samps$sampleID| grepl(sampleID, pattern = "ht")) %>% 
+  filter(sampleID %in% first_samps$sampleID| grepl(sampleID, pattern = "hd")) %>% 
   mutate(db = ifelse(grepl(sampleID, pattern = "lt"), "Liver Transplant", "Healthy Donor")) %>% 
   select(sampleID, taxid, db, pctseqs, Total) %>% 
   group_by(sampleID, taxid, pctseqs) %>% 
@@ -2823,7 +2823,7 @@ text(
 ### Potential Figure 6A: sPLS-DA Diversity Groups and Healthy Donors using Qualitative Metabolomics
 ```{r, potential-figure-6A-splsda-diversity-groups, fig.dim = c(16, 12), message=FALSE, warning=FALSE}
 diversity_healthy_metab_mat <-
-  metab_qual_anon %>% filter(sampleID %in% first_samps$sampleID|grepl(patientID, pattern = "ht")) %>% 
+  metab_qual_anon %>% filter(sampleID %in% first_samps$sampleID|grepl(patientID, pattern = "hd")) %>% 
   mutate(compound = ifelse(compound == "isovaleric-acid", "isovalerate", compound),
          compound = str_to_title(compound)) %>%
   filter(compound %in% heatmap_cmpds$compound|is.na(compound)) %>%
