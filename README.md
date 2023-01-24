@@ -2,7 +2,7 @@
 
 Code and Data from our manuscript titled "Microbiome compositions and fecal metabolite concentrations predict post-operative infection in liver transplant recipients"
 
-INSERT DOI BADGE HERE
+[![DOI](https://zenodo.org/badge/592530758.svg)](https://zenodo.org/badge/latestdoi/592530758)
 
 ***
 R version 4.2.2 (2022-10-31)
@@ -26,7 +26,7 @@ Results Folder
 
 To download the data there are two options available. 
 
-Option A) Download the zipped file at: [INSERT ZENODO LINK HERE] 
+Option A) Download the zipped file at: https://zenodo.org/badge/latestdoi/592530758
 
 Option B) Enable Git Large File Storage:
 
