@@ -6,7 +6,9 @@ Code and Data from our manuscript titled "Microbiome compositions and fecal meta
 
 ***
 R version 4.2.2 (2022-10-31)
+
 Platform: x86_64-apple-darwin17.0 (64-bit)
+
 Running under: macOS Monterey 12.2.1
 
 RStudio Version 2022.12.0+353
