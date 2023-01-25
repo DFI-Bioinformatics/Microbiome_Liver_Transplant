@@ -2626,7 +2626,8 @@ plotIndiv(
   col = c("#3A001E", "#8A0246", "#C20463"),
   star = TRUE,
   point.lwd = 0.5,
-  title = "sPLS-DA:\nDiversity Groups",
+  title = NULL,
+  size.title = 0.00001,
   style = "graphics",
   legend.title = "Diversity Group",
   X.label = paste0("Component 1 (", round(diversity_train_splsda_final$prop_expl_var$X[1] * 100), "%)"),
@@ -2730,7 +2731,8 @@ plotIndiv(
   col = c("#3A001E", "#8A0246", "#C20463"),
   star = TRUE,
   point.lwd = 0.5,
-  title = "sPLS-DA:\nDiversity Groups",
+  title = NULL,
+  size.title = 0.00001,
   style = "graphics",
   legend.title = "Diversity Group",
   X.label = paste0("Component 1 (", round(diversity_train_splsda_final$prop_expl_var$X[1] * 100), "%)"),
@@ -2818,407 +2820,6 @@ text(
 #   x = min(diversity_train_splsda_final$variates$X[,1])*1.05,
 #   paste0("High Diversity OR = ", round(diversity_epi$DOR[3], 1)),
 #     cex = 0.75, adj = 0, col = "#C20463")
-```
-
-### Potential Figure 6A: sPLS-DA Diversity Groups and Healthy Donors using Qualitative Metabolomics
-```{r, potential-figure-6A-splsda-diversity-groups, fig.dim = c(16, 12), message=FALSE, warning=FALSE}
-diversity_healthy_metab_mat <-
-  metab_qual_anon %>% filter(sampleID %in% first_samps$sampleID|grepl(patientID, pattern = "hd")) %>% 
-  mutate(compound = ifelse(compound == "isovaleric-acid", "isovalerate", compound),
-         compound = str_to_title(compound)) %>%
-  filter(compound %in% heatmap_cmpds$compound|is.na(compound)) %>%
-  ungroup() %>%
-  left_join(metaphlan_df_sumry %>% select(sampleID, diversity_group_abv)) %>% 
-  group_by(sampleID, compound, diversity_group_abv) %>% 
-  summarise(mvalue = mean(mvalue, na.rm = TRUE)) %>% 
-  ungroup() %>%
-  mutate_all(~replace(., is.nan(.), NA)) %>% 
-  select(sampleID, compound, mvalue, diversity_group_abv) %>% 
-  drop_na(sampleID) %>% 
-  pivot_wider(names_from = "compound", values_from = "mvalue") %>% 
-  filter(sampleID != "") %>%
-  column_to_rownames(var = "sampleID") %>% 
-  select(-`NA`, - diversity_group_abv) %>% 
-  filter_all(any_vars(!is.na(.)))
-
-diversity_healthy_metab_labs <-
-  diversity_healthy_metab_mat %>% 
-  rownames_to_column(var = "sampleID") %>% 
-  left_join(metaphlan_df_sumry %>% select(sampleID, diversity_group_abv)) %>% 
-  droplevels() %>% 
-  pull(diversity_group_abv)
-
-dim(diversity_healthy_metab_mat) #123 93 (means 93 compounds and 102 LT patients/infections)
-length(diversity_healthy_metab_labs) #123 (means 102 LT patients/infections)
-
-# Begin model training
-set.seed(1234)
-diversity_healthy_train <- sample(1:nrow(diversity_healthy_metab_mat), as.integer(0.7*nrow(diversity_healthy_metab_mat))) # randomly select 70% samples in training
-diversity_healthy_test <- setdiff(1:nrow(diversity_healthy_metab_mat), diversity_healthy_train) # rest is part of the test set
-
-# store matrices into training and test set:
-diversity_healthy_metab_mat.train <- diversity_healthy_metab_mat[diversity_healthy_train, ]
-diversity_healthy_metab_mat.test <- diversity_healthy_metab_mat[diversity_healthy_test,]
-diversity_healthy_metab_labs.train <- diversity_healthy_metab_labs[diversity_healthy_train]
-diversity_healthy_metab_labs.test <- diversity_healthy_metab_labs[diversity_healthy_test]
-
-# Train the model to tune hyperparameters
-# Initial model to find optimal number of components to include
-set.seed(1234)
-diversity_healthy_train_splsda <- mixOmics::splsda(diversity_healthy_metab_mat.train, diversity_healthy_metab_labs.train, ncomp = 5)
-
-# Performance assessment
-## 5-fold, 100-repeat cross validation
-set.seed(1234)
-diversity_healthy_train_plsda_perf <-
-  perf(
-    diversity_healthy_train_splsda,
-    validation = "Mfold",
-    folds = 5,
-    progressBar = FALSE,
-    auc = TRUE,
-    nrepeat = 50
-  )
-
-plot(
-  diversity_healthy_train_plsda_perf,
-  col = color.mixo(5:7),
-  sd = FALSE,
-  auc = TRUE,
-  legend.position = "horizontal"
-) # ncomp = 4 might be best for classification error rate and max.dist
-
-# Number of optimal variables to select for each component
-diversity_healthy_train_keepX <- c(1:10,  seq(20, 130, 10))
-
-set.seed(123)
-diversity_healthy_train_tune_splsda <-
-  mixOmics::tune.splsda(
-    diversity_healthy_metab_mat.train,
-    diversity_healthy_metab_labs.train,
-    ncomp = 4, # Choose 4 components (max) to be safe
-    validation = 'Mfold',
-    folds = 5,
-    dist = 'max.dist',
-    progressBar = FALSE,
-    auc = TRUE,
-    measure = "BER",
-    test.keepX = diversity_healthy_train_keepX,
-    nrepeat = 50
-  )
-
-plot(diversity_healthy_train_tune_splsda, col = color.jet(4))
-
-diversity_healthy_train_error <- diversity_healthy_train_tune_splsda$error.rate
-diversity_healthy_train_ncomp <- diversity_healthy_train_tune_splsda$choice.ncomp$ncomp # optimal number of components based on t-tests on the error rate
-diversity_healthy_train_ncomp #3 components are optimal
-
-diversity_healthy_train_select_keepX <- diversity_healthy_train_tune_splsda$choice.keepX[1:diversity_healthy_train_ncomp]  # optimal number of variables to select per component
-diversity_healthy_train_select_keepX
-
-
-# Final Model
-diversity_healthy_train_splsda_final <-
-  mixOmics::splsda(diversity_healthy_metab_mat.train, diversity_healthy_metab_labs.train, ncomp = diversity_healthy_train_ncomp, keepX = diversity_healthy_train_select_keepX)
-
-# Test the model
-diversity_healthy_predict_train_splsda_final <- predict(diversity_healthy_train_splsda_final, diversity_healthy_metab_mat.test, 
-                                dist = "max.dist")
-
-diversity_healthy_predict_train_comp2 <- diversity_healthy_predict_train_splsda_final$class$max.dist[,diversity_healthy_train_ncomp]
-
-diversity_healthy_union <- union(diversity_healthy_predict_train_comp2, diversity_healthy_metab_labs.test)
-
-confusionMatrix(table(factor(diversity_healthy_predict_train_comp2, diversity_healthy_union,
-                             levels = c("Low", "Medium", "High", "Healthy Donor")),
-                      factor(diversity_healthy_metab_labs.test, diversity_healthy_union,
-                             levels = c("Low", "Medium", "High", "Healthy Donor"))))
-
-diversity_healthy_train_background <- background.predict(diversity_healthy_train_splsda_final,
-                                            comp.predicted = 2,
-                                            xlim = c(-20,20),
-                                            ylim = c(-20,20),
-                                            dist = "centroids.dist") 
-
-# Model metrics for all samples
-diversity_healthy_tot <- predict(diversity_healthy_train_splsda_final,
-                        diversity_healthy_metab_mat,
-                        dist = "max.dist")
-
-diversity_healthy_tot_predict <- diversity_healthy_tot$class$max.dist[,diversity_healthy_train_ncomp]
-
-diversity_healthy_tot_union <- union(diversity_healthy_tot_predict, diversity_healthy_metab_labs)
-
-diversity_healthy_cm <- confusionMatrix(table(factor(diversity_healthy_tot_predict, diversity_healthy_tot_union,
-                                        levels = c("Low", "Medium", "High", "Healthy Donor")),
-                      factor(diversity_healthy_metab_labs, diversity_healthy_tot_union,
-                             levels = c("Low", "Medium", "High", "Healthy Donor"))),
-                        )
-diversity_healthy_cm
-
-# Additional model measures
-diversity_healthy_epi <- mltest::ml_test(predicted = factor(diversity_healthy_tot_predict, levels = c("Low", "Medium", "High", "Healthy Donor")),
-                                 true = factor(diversity_healthy_metab_labs, levels = c("Low", "Medium", "High", "Healthy Donor")))
-
-diversity_healthy_cm_names <- diversity_healthy_cm$table
-colnames(diversity_healthy_cm_names) <- c("Actual\nLow", "Actual\nMedium", "Actual\nHigh", "Actual\nHealthy Donor")
-rownames(diversity_healthy_cm_names) <- c("Predicted\nLow", "Predicted\nMedium", "Predicted\nHigh", "Predicted\nHealthy Donor")
-
-diversity_healthy_confusion_df <- diversity_healthy_cm_names %>% 
-  t() 
-
-{
-pdf(file = "./Results/Potential_Figure_6A.pdf", height = 10, width = 10)
-plotIndiv(
-  diversity_healthy_train_splsda_final,
-  xlim = c(min(diversity_healthy_train_splsda_final$variates$X[,1])*1.75, max(diversity_healthy_train_splsda_final$variates$X[,1])*1.15),
-  ylim = c(min(diversity_healthy_train_splsda_final$variates$X[,2])*1.25, max(diversity_healthy_train_splsda_final$variates$X[,2])*1.25),
-  comp = c(1,2),
-  pch = 1,
-  ind.names = FALSE,
-  legend = FALSE,
-  background = diversity_healthy_train_background,
-  col = c("#3A001E", "#8A0246", "#C20463", "#1A49BE"),
-  star = TRUE,
-  point.lwd = 0.5,
-  title = "sPLS-DA:\nDiversity Groups",
-  style = "graphics",
-  legend.title = "Diversity Group",
-  X.label = paste0("Component 1 (", round(diversity_healthy_train_splsda_final$prop_expl_var$X[1] * 100), "%)"),
-  Y.label = paste0("Component 2 (", round(diversity_healthy_train_splsda_final$prop_expl_var$X[2] * 100), "%)")
-) 
-addtable2plot(
-  y = 7.35,
-  x = 6.30,
-  diversity_healthy_confusion_df,
-  bty = "o",
-  display.rownames = TRUE,
-  hlines = TRUE,
-  vlines = TRUE,
-  cex = 0.5,
-  bg = "white"
-)
-text(
-  y = 7,
-  x = 7.75,
-  paste0("Overall ACC = ", 
-                    paste0(formatC(round(diversity_healthy_cm$overall[1], 3)*100, digits = 1, format = "f"), "%"), " [",
-                    paste0(formatC(round(diversity_healthy_cm$overall[3], 3)*100, digits = 1, format = "f"), "%"),", ",
-                    paste0(formatC(round(diversity_healthy_cm$overall[4], 3)*100, digits = 1, format = "f"), "%"),"]"),
-    cex = 0.5, adj = 0)
-
-text(
-  y = -3.5,
-  x = -6,
-  paste0("Low Diversity ACC = ", round(diversity_healthy_epi$balanced.accuracy[1]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#3A001E")
-text(
-  y = -3.8,
-  x = -6,
-  paste0("Low Diversity Sens. = ", round(diversity_healthy_epi$precision[1]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#3A001E")
-text(
-  y = -4.1,
-  x = -6,
-  paste0("Low Diversity Spec. = ", round(diversity_healthy_epi$specificity[1]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#3A001E")
-# text(
-#   y = -4.4,
-#   x = -6,
-#   paste0("Low Diversity OR = ", round(diversity_healthy_epi$DOR[1], 1)),
-#     cex = 0.75, adj = 0, col = "#3A001E")
-
-text(
-  y = 3.8,
-  x = -7,
-  paste0("Medium Diversity ACC = ", round(diversity_healthy_epi$balanced.accuracy[2]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#8A0246")
-text(
-  y = 3.5,
-  x = -7,
-  paste0("Medium Diversity Sens. = ", round(diversity_healthy_epi$precision[2]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#8A0246")
-text(
-  y = 3.2,
-  x = -7,
-  paste0("Medium Diversity Spec. = ", round(diversity_healthy_epi$specificity[2]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#8A0246")
-# text(
-#   y = 2.9,
-#   x = -7,
-#   paste0("Medium Diversity OR = ", round(diversity_healthy_epi$DOR[2], 1)),
-#     cex = 0.75, adj = 0, col = "#8A0246")
-
-
-text(
-  y = 6.5, 
-  x = 2,
-  paste0("High Diversity ACC = ", round(diversity_healthy_epi$balanced.accuracy[3]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#C20463")
-text(
-  y = 6.2, 
-  x = 2,
-  paste0("High Diversity Sens. = ", round(diversity_healthy_epi$precision[3]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#C20463")
-text(
-  y = 5.9, 
-  x = 2,
-  paste0("High Diversity Spec. = ", round(diversity_healthy_epi$specificity[3]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#C20463")
-# text(
-#   y = 5.6, 
-#   x = 2,
-#   paste0("High Diversity OR = ", round(diversity_healthy_epi$DOR[3], 1)),
-#     cex = 0.75, adj = 0, col = "#C20463")
-
-
-text(
-  y = -3.5,
-  x = 3,
-  paste0("Healthy Donor ACC = ", round(diversity_healthy_epi$balanced.accuracy[4]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#1A49BE")
-text(
-  y = -3.8,
-  x = 3,
-  paste0("Healthy Donor Sens. = ", round(diversity_healthy_epi$precision[4]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#1A49BE")
-text(
-  y = -4.1,
-  x = 3,
-  paste0("Healthy Donor Spec. = ", round(diversity_healthy_epi$specificity[4]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#1A49BE")
-# text(
-#   y = -4.4,
-#   x = 3,
-#   paste0("Healthy Donor OR = ", round(diversity_healthy_epi$DOR[4], 1)),
-#     cex = 0.75, adj = 0, col = "#1A49BE")
-
-invisible(dev.off())
-}
-
- plotIndiv(
-  diversity_healthy_train_splsda_final,
-  xlim = c(min(diversity_healthy_train_splsda_final$variates$X[,1])*1.75, max(diversity_healthy_train_splsda_final$variates$X[,1])*1.15),
-  ylim = c(min(diversity_healthy_train_splsda_final$variates$X[,2])*1.25, max(diversity_healthy_train_splsda_final$variates$X[,2])*1.25),
-  comp = c(1,2),
-  pch = 1,
-  ind.names = FALSE,
-  legend = FALSE,
-  background = diversity_healthy_train_background,
-  col = c("#3A001E", "#8A0246", "#C20463", "#1A49BE"),
-  star = TRUE,
-  point.lwd = 0.5,
-  title = "sPLS-DA:\nDiversity Groups",
-  style = "graphics",
-  legend.title = "Diversity Group",
-  X.label = paste0("Component 1 (", round(diversity_healthy_train_splsda_final$prop_expl_var$X[1] * 100), "%)"),
-  Y.label = paste0("Component 2 (", round(diversity_healthy_train_splsda_final$prop_expl_var$X[2] * 100), "%)")
-) 
-addtable2plot(
-  y = 7.35,
-  x = 6.30,
-  diversity_healthy_confusion_df,
-  bty = "o",
-  display.rownames = TRUE,
-  hlines = TRUE,
-  vlines = TRUE,
-  cex = 0.5,
-  bg = "white"
-)
-text(
-  y = 7,
-  x = 7.75,
-  paste0("Overall ACC = ", 
-                    paste0(formatC(round(diversity_healthy_cm$overall[1], 3)*100, digits = 1, format = "f"), "%"), " [",
-                    paste0(formatC(round(diversity_healthy_cm$overall[3], 3)*100, digits = 1, format = "f"), "%"),", ",
-                    paste0(formatC(round(diversity_healthy_cm$overall[4], 3)*100, digits = 1, format = "f"), "%"),"]"),
-    cex = 0.5, adj = 0)
-
-text(
-  y = -3.5,
-  x = -6,
-  paste0("Low Diversity ACC = ", round(diversity_healthy_epi$balanced.accuracy[1]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#3A001E")
-text(
-  y = -3.8,
-  x = -6,
-  paste0("Low Diversity Sens. = ", round(diversity_healthy_epi$precision[1]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#3A001E")
-text(
-  y = -4.1,
-  x = -6,
-  paste0("Low Diversity Spec. = ", round(diversity_healthy_epi$specificity[1]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#3A001E")
-# text(
-#   y = -4.4,
-#   x = -6,
-#   paste0("Low Diversity OR = ", round(diversity_healthy_epi$DOR[1], 1)),
-#     cex = 0.75, adj = 0, col = "#3A001E")
-
-text(
-  y = 3.8,
-  x = -7,
-  paste0("Medium Diversity ACC = ", round(diversity_healthy_epi$balanced.accuracy[2]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#8A0246")
-text(
-  y = 3.5,
-  x = -7,
-  paste0("Medium Diversity Sens. = ", round(diversity_healthy_epi$precision[2]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#8A0246")
-text(
-  y = 3.2,
-  x = -7,
-  paste0("Medium Diversity Spec. = ", round(diversity_healthy_epi$specificity[2]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#8A0246")
-# text(
-#   y = 2.9,
-#   x = -7,
-#   paste0("Medium Diversity OR = ", round(diversity_healthy_epi$DOR[2], 1)),
-#     cex = 0.75, adj = 0, col = "#8A0246")
-
-
-text(
-  y = 6.5, 
-  x = 2,
-  paste0("High Diversity ACC = ", round(diversity_healthy_epi$balanced.accuracy[3]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#C20463")
-text(
-  y = 6.2, 
-  x = 2,
-  paste0("High Diversity Sens. = ", round(diversity_healthy_epi$precision[3]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#C20463")
-text(
-  y = 5.9, 
-  x = 2,
-  paste0("High Diversity Spec. = ", round(diversity_healthy_epi$specificity[3]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#C20463")
-# text(
-#   y = 5.6, 
-#   x = 2,
-#   paste0("High Diversity OR = ", round(diversity_healthy_epi$DOR[3], 1)),
-#     cex = 0.75, adj = 0, col = "#C20463")
-
-
-text(
-  y = -3.5,
-  x = 3,
-  paste0("Healthy Donor ACC = ", round(diversity_healthy_epi$balanced.accuracy[4]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#1A49BE")
-text(
-  y = -3.8,
-  x = 3,
-  paste0("Healthy Donor Sens. = ", round(diversity_healthy_epi$precision[4]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#1A49BE")
-text(
-  y = -4.1,
-  x = 3,
-  paste0("Healthy Donor Spec. = ", round(diversity_healthy_epi$specificity[4]*100, 1), "%"),
-    cex = 0.75, adj = 0, col = "#1A49BE")
-# text(
-#   y = -4.4,
-#   x = 3,
-#   paste0("Healthy Donor OR = ", round(diversity_healthy_epi$DOR[4], 1)),
-#     cex = 0.75, adj = 0, col = "#1A49BE")
 ```
 
 ### Figure 6B: sPLS-DA Any Bacterial Infection using Qualitative Metabolomics
@@ -3382,10 +2983,11 @@ plotIndiv(
   ind.names = FALSE,
   legend = FALSE,
   background = infx_train_background,
-  col = c("goldenrod", "gray87"),
+  col = c("goldenrod", "gray75"),
   star = TRUE,
   point.lwd = 0.5,
-  title = "sPLS-DA:\nAny Infection vs No Infection",
+  title = NULL,
+  size.title = 0.00001,
   style = "graphics",
   legend.title = "Infection Group",
   X.label = paste0("Component 1 (", round(infx_train_splsda_final$prop_expl_var$X[1] * 100), "%)"),
@@ -3445,7 +3047,7 @@ text(
 invisible(dev.off())
 }
 
-plotIndiv(
+ plotIndiv(
   infx_train_splsda_final,
   comp = c(1,2),
   pch = 1,
@@ -3455,7 +3057,8 @@ plotIndiv(
   col = c("goldenrod", "gray87"),
   star = TRUE,
   point.lwd = 0.5,
-  title = "sPLS-DA:\nAny Infection vs No Infection",
+  title = NULL,
+  size.title = 0.00001,
   style = "graphics",
   legend.title = "Infection Group",
   X.label = paste0("Component 1 (", round(infx_train_splsda_final$prop_expl_var$X[1] * 100), "%)"),
@@ -3517,99 +3120,111 @@ text(
 ### Combine Figure 6A + 6B: sPLS-DA Diversity Groups and Any Bacterial Infection 
 ```{r, figure-6-combined, fig.dim = c(20, 10), message=FALSE, warning=FALSE}
 {
-pdf(file = "./Results/Figure_6.pdf", height = 8, width = 22)  
+pdf(file = "./Results/Figure_6.pdf", height = 10, width = 18)  
 par(mfrow=c(1,2))
 
 # Figure 6A
 plotIndiv(
   diversity_train_splsda_final,
-  xlim = c(min(diversity_train_splsda_final$variates$X[,1])*1.15, max(diversity_train_splsda_final$variates$X[,1])),
+  xlim = c(min(diversity_train_splsda_final$variates$X[,1])*1.05, max(diversity_train_splsda_final$variates$X[,1])*1.8),
+  ylim = c(min(diversity_train_splsda_final$variates$X[,2])*1.15, max(diversity_train_splsda_final$variates$X[,2])*1.8),
   comp = c(1,2),
   pch = 1,
   ind.names = FALSE,
-  legend = TRUE,
+  legend = FALSE,
   background = diversity_train_background,
   col = c("#3A001E", "#8A0246", "#C20463"),
   star = TRUE,
   point.lwd = 0.5,
-  title = "sPLS-DA:\nDiversity Groups",
+  title = NULL,
+  size.title = 0.00001,
   style = "graphics",
   legend.title = "Diversity Group",
   X.label = paste0("Component 1 (", round(diversity_train_splsda_final$prop_expl_var$X[1] * 100), "%)"),
   Y.label = paste0("Component 2 (", round(diversity_train_splsda_final$prop_expl_var$X[2] * 100), "%)")
 ) 
 addtable2plot(
-  y = -2.5,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.2,
+  y = -4.68,
+  x = min(diversity_train_splsda_final$variates$X[,1])*1.1,
   diversity_confusion_df,
   bty = "o",
   display.rownames = TRUE,
   hlines = TRUE,
   vlines = TRUE,
-  cex = 0.75
+  cex = 0.75,
+  bg = "white"
 )
 text(
-  y = -3,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("Low Div. Accuracy = ", round(diversity_epi$balanced.accuracy[1]*100, 1), "%"),
-    cex = 0.75, adj = 0)
-text(
-  y = -3.2,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("Low Div. Sensitivity = ", round(diversity_epi$precision[1]*100, 1), "%"),
-    cex = 0.75, adj = 0)
-text(
-  y = -3.4,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("Low Div. Specificity = ", round(diversity_epi$specificity[1]*100, 1), "%"),
-    cex = 0.75, adj = 0)
-text(
-  y = -3.6,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("Low Div. Odds Ratio = ", round(diversity_epi$DOR[1], 1)),
-    cex = 0.75, adj = 0)
+  y = -6.5,
+  x = min(diversity_train_splsda_final$variates$X[,1])*1.1,
+  paste0("Overall ACC = ", 
+                    paste0(formatC(round(diversity_cm$overall[1], 3)*100, digits = 1, format = "f"), "%"), " [",
+                    paste0(formatC(round(diversity_cm$overall[3], 3)*100, digits = 1, format = "f"), "%"),", ",
+                    paste0(formatC(round(diversity_cm$overall[4], 3)*100, digits = 1, format = "f"), "%"),"]"),
+    cex = 1.05, adj = 0)
 
 text(
-  y = -4,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("Medium Div. Accuracy = ", round(diversity_epi$balanced.accuracy[2]*100, 1), "%"),
-    cex = 0.75, adj = 0)
+  y = 3,
+  x = 0.5,
+  paste0("Low Diversity ACC = ", round(diversity_epi$balanced.accuracy[1]*100, 1), "%"),
+    cex = 1.05, adj = 0, col = "#3A001E")
 text(
-  y = -4.2,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("Medium Div. Sensitivity = ", round(diversity_epi$precision[2]*100, 1), "%"),
-    cex = 0.75, adj = 0)
+  y = 2.7,
+  x = 0.5,
+  paste0("Low Diversity Sens. = ", round(diversity_epi$precision[1]*100, 1), "%"),
+    cex = 1.05, adj = 0, col = "#3A001E")
 text(
-  y = -4.4,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("Medium Div. Specificity = ", round(diversity_epi$specificity[2]*100, 1), "%"),
-    cex = 0.75, adj = 0)
-text(
-  y = -4.6,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("Medium Div. Odds Ratio = ", round(diversity_epi$DOR[2], 1)),
-    cex = 0.75, adj = 0)
+  y = 2.4,
+  x = 0.5,
+  paste0("Low Diversity Spec. = ", round(diversity_epi$specificity[1]*100, 1), "%"),
+    cex = 1.05, adj = 0, col = "#3A001E")
+# text(
+#   y = 2.1,
+#   x = 0.5,
+#   paste0("Low Diversity OR = ", round(diversity_epi$DOR[1], 1)),
+#     cex = 1.05, adj = 0, col = "#3A001E")
 
 text(
-  y = -5,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("High Div. Accuracy = ", round(diversity_epi$balanced.accuracy[3]*100, 1), "%"),
-    cex = 0.75, adj = 0)
+  y = -5.5,
+  x = 0,
+  paste0("Medium Diversity ACC = ", round(diversity_epi$balanced.accuracy[2]*100, 1), "%"),
+    cex = 1.05, adj = 0, col = "#8A0246")
 text(
-  y = -5.2,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("High Div. Sensitivity = ", round(diversity_epi$precision[3]*100, 1), "%"),
-    cex = 0.75, adj = 0)
+  y = -5.8,
+  x = 0,
+  paste0("Medium Diversity Sens. = ", round(diversity_epi$precision[2]*100, 1), "%"),
+    cex = 1.05, adj = 0, col = "#8A0246")
 text(
-  y = -5.4,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("High Div. Specificity = ", round(diversity_epi$specificity[3]*100, 1), "%"),
-    cex = 0.75, adj = 0)
+  y = -6.1,
+  x = 0,
+  paste0("Medium Diversity Spec. = ", round(diversity_epi$specificity[2]*100, 1), "%"),
+    cex = 1.05, adj = 0, col = "#8A0246")
+# text(
+#   y = -7.4,
+#   x = 0,
+#   paste0("Medium Diversity OR = ", round(diversity_epi$DOR[2], 1)),
+#     cex = 1.05, adj = 0, col = "#8A0246")
+
 text(
-  y = -5.6,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("High Div. Odds Ratio = ", round(diversity_epi$DOR[3], 1)),
-    cex = 0.75, adj = 0)
+  y = 3,
+  x = min(diversity_train_splsda_final$variates$X[,1])*1.05,
+  paste0("High Diversity ACC = ", round(diversity_epi$balanced.accuracy[3]*100, 1), "%"),
+    cex = 1.05, adj = 0, col = "#C20463")
+text(
+  y = 2.7,
+  x = min(diversity_train_splsda_final$variates$X[,1])*1.05,
+  paste0("High Diversity Sens. = ", round(diversity_epi$precision[3]*100, 1), "%"),
+    cex = 1.05, adj = 0, col = "#C20463")
+text(
+  y = 2.4,
+  x = min(diversity_train_splsda_final$variates$X[,1])*1.05,
+  paste0("High Diversity Spec. = ", round(diversity_epi$specificity[3]*100, 1), "%"),
+    cex = 1.05, adj = 0, col = "#C20463")
+# text(
+#   y = 2.1,
+#   x = min(diversity_train_splsda_final$variates$X[,1])*1.05,
+#   paste0("High Diversity OR = ", round(diversity_epi$DOR[3], 1)),
+#     cex = 1.05, adj = 0, col = "#C20463")
 
 # Figure 6B
 plotIndiv(
@@ -3617,155 +3232,178 @@ plotIndiv(
   comp = c(1,2),
   pch = 1,
   ind.names = FALSE,
-  legend = TRUE,
+  legend = FALSE,
   background = infx_train_background,
-  col = c("goldenrod", "gray87"),
+  col = c("goldenrod", "gray75"),
   star = TRUE,
   point.lwd = 0.5,
-  title = "sPLS-DA:\nAny Infection vs No Infection",
+  title = NULL,
+  size.title = 0.00001,
   style = "graphics",
   legend.title = "Infection Group",
   X.label = paste0("Component 1 (", round(infx_train_splsda_final$prop_expl_var$X[1] * 100), "%)"),
   Y.label = paste0("Component 2 (", round(infx_train_splsda_final$prop_expl_var$X[2] * 100), "%)")
 ) 
 addtable2plot(
-  y = max(infx_train_splsda_final$variates$X[,2])*0.8,
+  y = max(infx_train_splsda_final$variates$X[,2])*0.1,
   x = min(infx_train_splsda_final$variates$X[,1]),
   infx_confusion_df,
   bty = "o",
   display.rownames = TRUE,
   hlines = TRUE,
   vlines = TRUE,
-  cex = 0.75
+  cex = 0.75,
+  bg = "white"
 )
 text(
-  y = max(infx_train_splsda_final$variates$X[,2])*0.6,
+  y = -4,
+  x = -2.75,
+  substitute(bold("Infection")), cex = 1.75, adj = 0, col = "goldenrod")
+text(
+  y = 4,
+  x = -1,
+  substitute(bold("No Infection")), cex = 1.75, adj = 0, col = "gray70")
+text(
+  y = max(infx_train_splsda_final$variates$X[,2])*1,
   x = min(infx_train_splsda_final$variates$X[,1]),
-  paste0("Accuracy = ", 
+  paste0("ACC = ", 
                     round(infx_cm$overall[1]*100, 1), "% [",
                     round(infx_cm$overall[3]*100, 1), "%, ",
                     round(infx_cm$overall[4]*100, 1), "%]"),
-    cex = 0.75, adj = 0)
+    cex = 1.05, adj = 0)
 text(
-  y = max(infx_train_splsda_final$variates$X[,2])*0.5,
+  y = max(infx_train_splsda_final$variates$X[,2])*0.9,
   x = min(infx_train_splsda_final$variates$X[,1]),
-  paste0("Sensitivity = ", 
+  paste0("Sens. = ", 
                     paste0(formatC(round(infx_epi$detail[2][3,], 3)*100, digits = 1, format = "f"), "%"), " [",
                     paste0(formatC(round(infx_epi$detail[3][3,], 3)*100, digits = 1, format = "f"), "%"),", ",
                     paste0(formatC(round(infx_epi$detail[4][3,], 3)*100, digits = 1, format = "f"), "%"),"]"),
-    cex = 0.75, adj = 0)
+    cex = 1.05, adj = 0)
 text(
-  y = max(infx_train_splsda_final$variates$X[,2])*0.4,
+  y = max(infx_train_splsda_final$variates$X[,2])*0.8,
   x = min(infx_train_splsda_final$variates$X[,1]),
-  paste0("Specificity = ", 
+  paste0("Spec. = ", 
                     paste0(formatC(round(infx_epi$detail[2][4,], 3)*100, digits = 1, format = "f"), "%"), " [",
                     paste0(formatC(round(infx_epi$detail[3][4,], 3)*100, digits = 1, format = "f"), "%"),", ",
                     paste0(formatC(round(infx_epi$detail[4][4,], 3)*100, digits = 1, format = "f"), "%"),"]"),
-    cex = 0.75, adj = 0)
+    cex = 1.05, adj = 0)
 text(
-  y = max(infx_train_splsda_final$variates$X[,2])*0.3,
+  y = max(infx_train_splsda_final$variates$X[,2])*0.7,
   x = min(infx_train_splsda_final$variates$X[,1]),
-  paste0("Odds Ratio = ",
+  paste0("OR = ",
                     formatC(round(infx_epi$detail[2][6,], 3), digits = 1, format = "f"),  " [",
                     formatC(round(infx_epi$detail[3][6,], 3), digits = 1, format = "f"), ", ",
                     formatC(round(infx_epi$detail[4][6,], 3), digits = 1, format = "f"), "]"),
-    cex = 0.75, adj = 0)
+    cex = 1.05, adj = 0)
 
 invisible(dev.off())
 }
 
-par(mfrow=c(1,2))
 
 # Figure 6A
+par(mfrow=c(1,2))
+
 plotIndiv(
   diversity_train_splsda_final,
-  xlim = c(min(diversity_train_splsda_final$variates$X[,1])*1.15, max(diversity_train_splsda_final$variates$X[,1])),
+  xlim = c(min(diversity_train_splsda_final$variates$X[,1])*1.05, max(diversity_train_splsda_final$variates$X[,1])*1.8),
+  ylim = c(min(diversity_train_splsda_final$variates$X[,2])*1.15, max(diversity_train_splsda_final$variates$X[,2])*1.8),
   comp = c(1,2),
   pch = 1,
   ind.names = FALSE,
-  legend = TRUE,
+  legend = FALSE,
   background = diversity_train_background,
   col = c("#3A001E", "#8A0246", "#C20463"),
   star = TRUE,
   point.lwd = 0.5,
-  title = "sPLS-DA:\nDiversity Groups",
+  title = NULL,
+  size.title = 0.00001,
   style = "graphics",
   legend.title = "Diversity Group",
   X.label = paste0("Component 1 (", round(diversity_train_splsda_final$prop_expl_var$X[1] * 100), "%)"),
   Y.label = paste0("Component 2 (", round(diversity_train_splsda_final$prop_expl_var$X[2] * 100), "%)")
 ) 
 addtable2plot(
-  y = -2.5,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.2,
+  y = -4.68,
+  x = min(diversity_train_splsda_final$variates$X[,1])*1.1,
   diversity_confusion_df,
   bty = "o",
   display.rownames = TRUE,
   hlines = TRUE,
   vlines = TRUE,
-  cex = 0.75
+  cex = 0.75,
+  bg = "white"
 )
 text(
-  y = -3,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("Low Div. Accuracy = ", round(diversity_epi$balanced.accuracy[1]*100, 1), "%"),
-    cex = 0.75, adj = 0)
-text(
-  y = -3.2,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("Low Div. Sensitivity = ", round(diversity_epi$precision[1]*100, 1), "%"),
-    cex = 0.75, adj = 0)
-text(
-  y = -3.4,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("Low Div. Specificity = ", round(diversity_epi$specificity[1]*100, 1), "%"),
-    cex = 0.75, adj = 0)
-text(
-  y = -3.6,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("Low Div. Odds Ratio = ", round(diversity_epi$DOR[1], 1)),
-    cex = 0.75, adj = 0)
+  y = -6.5,
+  x = min(diversity_train_splsda_final$variates$X[,1])*1.1,
+  paste0("Overall ACC = ", 
+                    paste0(formatC(round(diversity_cm$overall[1], 3)*100, digits = 1, format = "f"), "%"), " [",
+                    paste0(formatC(round(diversity_cm$overall[3], 3)*100, digits = 1, format = "f"), "%"),", ",
+                    paste0(formatC(round(diversity_cm$overall[4], 3)*100, digits = 1, format = "f"), "%"),"]"),
+    cex = 1.05, adj = 0)
 
 text(
-  y = -4,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("Medium Div. Accuracy = ", round(diversity_epi$balanced.accuracy[2]*100, 1), "%"),
-    cex = 0.75, adj = 0)
+  y = 3,
+  x = 0.5,
+  paste0("Low Diversity ACC = ", round(diversity_epi$balanced.accuracy[1]*100, 1), "%"),
+    cex = 1.05, adj = 0, col = "#3A001E")
 text(
-  y = -4.2,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("Medium Div. Sensitivity = ", round(diversity_epi$precision[2]*100, 1), "%"),
-    cex = 0.75, adj = 0)
+  y = 2.7,
+  x = 0.5,
+  paste0("Low Diversity Sens. = ", round(diversity_epi$precision[1]*100, 1), "%"),
+    cex = 1.05, adj = 0, col = "#3A001E")
 text(
-  y = -4.4,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("Medium Div. Specificity = ", round(diversity_epi$specificity[2]*100, 1), "%"),
-    cex = 0.75, adj = 0)
-text(
-  y = -4.6,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("Medium Div. Odds Ratio = ", round(diversity_epi$DOR[2], 1)),
-    cex = 0.75, adj = 0)
+  y = 2.4,
+  x = 0.5,
+  paste0("Low Diversity Spec. = ", round(diversity_epi$specificity[1]*100, 1), "%"),
+    cex = 1.05, adj = 0, col = "#3A001E")
+# text(
+#   y = 2.1,
+#   x = 0.5,
+#   paste0("Low Diversity OR = ", round(diversity_epi$DOR[1], 1)),
+#     cex = 1.05, adj = 0, col = "#3A001E")
 
 text(
-  y = -5,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("High Div. Accuracy = ", round(diversity_epi$balanced.accuracy[3]*100, 1), "%"),
-    cex = 0.75, adj = 0)
+  y = -5.5,
+  x = 0,
+  paste0("Medium Diversity ACC = ", round(diversity_epi$balanced.accuracy[2]*100, 1), "%"),
+    cex = 1.05, adj = 0, col = "#8A0246")
 text(
-  y = -5.2,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("High Div. Sensitivity = ", round(diversity_epi$precision[3]*100, 1), "%"),
-    cex = 0.75, adj = 0)
+  y = -5.8,
+  x = 0,
+  paste0("Medium Diversity Sens. = ", round(diversity_epi$precision[2]*100, 1), "%"),
+    cex = 1.05, adj = 0, col = "#8A0246")
 text(
-  y = -5.4,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("High Div. Specificity = ", round(diversity_epi$specificity[3]*100, 1), "%"),
-    cex = 0.75, adj = 0)
+  y = -6.1,
+  x = 0,
+  paste0("Medium Diversity Spec. = ", round(diversity_epi$specificity[2]*100, 1), "%"),
+    cex = 1.05, adj = 0, col = "#8A0246")
+# text(
+#   y = -7.4,
+#   x = 0,
+#   paste0("Medium Diversity OR = ", round(diversity_epi$DOR[2], 1)),
+#     cex = 1.05, adj = 0, col = "#8A0246")
+
 text(
-  y = -5.6,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.15,
-  paste0("High Div. Odds Ratio = ", round(diversity_epi$DOR[3], 1)),
-    cex = 0.75, adj = 0)
+  y = 3,
+  x = min(diversity_train_splsda_final$variates$X[,1])*1.05,
+  paste0("High Diversity ACC = ", round(diversity_epi$balanced.accuracy[3]*100, 1), "%"),
+    cex = 1.05, adj = 0, col = "#C20463")
+text(
+  y = 2.7,
+  x = min(diversity_train_splsda_final$variates$X[,1])*1.05,
+  paste0("High Diversity Sens. = ", round(diversity_epi$precision[3]*100, 1), "%"),
+    cex = 1.05, adj = 0, col = "#C20463")
+text(
+  y = 2.4,
+  x = min(diversity_train_splsda_final$variates$X[,1])*1.05,
+  paste0("High Diversity Spec. = ", round(diversity_epi$specificity[3]*100, 1), "%"),
+    cex = 1.05, adj = 0, col = "#C20463")
+# text(
+#   y = 2.1,
+#   x = min(diversity_train_splsda_final$variates$X[,1])*1.05,
+#   paste0("High Diversity OR = ", round(diversity_epi$DOR[3], 1)),
+#     cex = 1.05, adj = 0, col = "#C20463")
 
 # Figure 6B
 plotIndiv(
@@ -3773,59 +3411,69 @@ plotIndiv(
   comp = c(1,2),
   pch = 1,
   ind.names = FALSE,
-  legend = TRUE,
+  legend = FALSE,
   background = infx_train_background,
-  col = c("goldenrod", "gray87"),
+  col = c("goldenrod", "gray75"),
   star = TRUE,
   point.lwd = 0.5,
-  title = "sPLS-DA:\nAny Infection vs No Infection",
+  title = NULL,
+  size.title = 0.00001,
   style = "graphics",
   legend.title = "Infection Group",
   X.label = paste0("Component 1 (", round(infx_train_splsda_final$prop_expl_var$X[1] * 100), "%)"),
   Y.label = paste0("Component 2 (", round(infx_train_splsda_final$prop_expl_var$X[2] * 100), "%)")
 ) 
 addtable2plot(
-  y = max(infx_train_splsda_final$variates$X[,2])*0.8,
+  y = max(infx_train_splsda_final$variates$X[,2])*0.1,
   x = min(infx_train_splsda_final$variates$X[,1]),
   infx_confusion_df,
   bty = "o",
   display.rownames = TRUE,
   hlines = TRUE,
   vlines = TRUE,
-  cex = 0.75
+  cex = 0.75,
+  bg = "white"
 )
 text(
-  y = max(infx_train_splsda_final$variates$X[,2])*0.6,
+  y = -4,
+  x = -2.75,
+  substitute(bold("Infection")), cex = 1.75, adj = 0, col = "goldenrod")
+text(
+  y = 4,
+  x = -1,
+  substitute(bold("No Infection")), cex = 1.75, adj = 0, col = "gray70")
+text(
+  y = max(infx_train_splsda_final$variates$X[,2])*1,
   x = min(infx_train_splsda_final$variates$X[,1]),
-  paste0("Accuracy = ", 
+  paste0("ACC = ", 
                     round(infx_cm$overall[1]*100, 1), "% [",
                     round(infx_cm$overall[3]*100, 1), "%, ",
                     round(infx_cm$overall[4]*100, 1), "%]"),
-    cex = 0.75, adj = 0)
+    cex = 1.05, adj = 0)
 text(
-  y = max(infx_train_splsda_final$variates$X[,2])*0.5,
+  y = max(infx_train_splsda_final$variates$X[,2])*0.9,
   x = min(infx_train_splsda_final$variates$X[,1]),
-  paste0("Sensitivity = ", 
+  paste0("Sens. = ", 
                     paste0(formatC(round(infx_epi$detail[2][3,], 3)*100, digits = 1, format = "f"), "%"), " [",
                     paste0(formatC(round(infx_epi$detail[3][3,], 3)*100, digits = 1, format = "f"), "%"),", ",
                     paste0(formatC(round(infx_epi$detail[4][3,], 3)*100, digits = 1, format = "f"), "%"),"]"),
-    cex = 0.75, adj = 0)
+    cex = 1.05, adj = 0)
 text(
-  y = max(infx_train_splsda_final$variates$X[,2])*0.4,
+  y = max(infx_train_splsda_final$variates$X[,2])*0.8,
   x = min(infx_train_splsda_final$variates$X[,1]),
-  paste0("Specificity = ", 
+  paste0("Spec. = ", 
                     paste0(formatC(round(infx_epi$detail[2][4,], 3)*100, digits = 1, format = "f"), "%"), " [",
                     paste0(formatC(round(infx_epi$detail[3][4,], 3)*100, digits = 1, format = "f"), "%"),", ",
                     paste0(formatC(round(infx_epi$detail[4][4,], 3)*100, digits = 1, format = "f"), "%"),"]"),
-    cex = 0.75, adj = 0)
+    cex = 1.05, adj = 0)
 text(
-  y = max(infx_train_splsda_final$variates$X[,2])*0.3,
+  y = max(infx_train_splsda_final$variates$X[,2])*0.7,
   x = min(infx_train_splsda_final$variates$X[,1]),
-  paste0("Odds Ratio = ",
+  paste0("OR = ",
                     formatC(round(infx_epi$detail[2][6,], 3), digits = 1, format = "f"),  " [",
                     formatC(round(infx_epi$detail[3][6,], 3), digits = 1, format = "f"), ", ",
                     formatC(round(infx_epi$detail[4][6,], 3), digits = 1, format = "f"), "]"),
-    cex = 0.75, adj = 0)
+    cex = 1.05, adj = 0)
 ```
 
 ### Supplemental Figure 2A + 2B: Plot Loadings for Diversity Groups
@@ -3897,76 +3545,6 @@ plotLoadings(
 )
 ```
 
-### Potential Supplemental Figure 2A + 2B: Plot Loadings for Diversity Groups and Healthy Donors
-```{r, supplemental-figure-2-splsda-diversity-groups-healthy-donors, fig.dim = c(14, 10), message=FALSE, warning=FALSE}
-# Take absolute value to make diversity group loadings plot narrower
-diversity_healthy_train_splsda_final$loadings$X <- abs(diversity_healthy_train_splsda_final$loadings$X)
-
-# Combine Supplemental Figures 2A + 2B
-
-pdf(file = "./Results/Potential_Supplemental_Figure_2.pdf",
-         height = 8, 
-         width = 10)
-
-par(mfrow = c(1,3))
-
-# Supplmental Figure 2A
-plotLoadings(
-  diversity_healthy_train_splsda_final,
-  contrib = 'max',
-  method = 'mean',
-  comp = 1,
-  legend = FALSE,
-  legend.col = c(c("#3A001E", "#8A0246", "#C20463", "#1A49BE")),
-  size.name = 0.6,
-  size.title = rel(1),
-  ndisplay = 50
-)
-
-# Supplmental Figure 2B
-plotLoadings(
-  diversity_healthy_train_splsda_final,
-  contrib = 'max',
-  method = 'mean',
-  comp = 2,
-  legend.col = c("#3A001E", "#8A0246", "#C20463", "#1A49BE"),
-  size.name = 0.6,
-  size.title = rel(1),
-  ndisplay = 50
-)
-
-invisible(dev.off())
-
-
-par(mfrow = c(1,3))
-
-# Supplmental Figure 2A
-plotLoadings(
-  diversity_healthy_train_splsda_final,
-  contrib = 'max',
-  method = 'mean',
-  comp = 1,
-  legend = FALSE,
-  legend.col = c(c("#3A001E", "#8A0246", "#C20463", "#1A49BE")),
-  size.name = 0.6,
-  size.title = rel(1),
-  ndisplay = 50
-)
-
-# Supplmental Figure 2B
-plotLoadings(
-  diversity_healthy_train_splsda_final,
-  contrib = 'max',
-  method = 'mean',
-  comp = 2,
-  legend.col = c("#3A001E", "#8A0246", "#C20463", "#1A49BE"),
-  size.name = 0.6,
-  size.title = rel(1),
-  ndisplay = 50
-)
-```
-
-
 ### Supplemental Figure 3A + 3B: Plot Loadings for Any Bacterial Infection
 ```{r, supplemental-figure-3-splsda-any-infection, fig.dim = c(14, 10), message=FALSE, warning=FALSE}
 # Take absolute value to make diversity group loadings plot narrower
@@ -3987,7 +3565,7 @@ plotLoadings(
   method = 'mean',
   comp = 1,
   legend = FALSE,
-  legend.col = c("goldenrod", "gray87"),
+  legend.col = c("goldenrod", "gray75"),
   size.name = 0.6,
   size.title = rel(1),
   ndisplay = 50
@@ -3999,7 +3577,7 @@ plotLoadings(
   contrib = 'max',
   method = 'mean',
   comp = 2,
-  legend.col = c("goldenrod", "gray87"),
+  legend.col = c("goldenrod", "gray75"),
   size.name = 0.6,
   size.title = rel(1),
   ndisplay = 50
@@ -4016,7 +3594,7 @@ plotLoadings(
   method = 'mean',
   comp = 1,
   legend = FALSE,
-  legend.col = c("goldenrod", "gray87"),
+  legend.col = c("goldenrod", "gray75"),
   size.name = 0.6,
   size.title = rel(1),
   ndisplay = 50
@@ -4028,7 +3606,7 @@ plotLoadings(
   contrib = 'max',
   method = 'mean',
   comp = 2,
-  legend.col = c("goldenrod", "gray87"),
+  legend.col = c("goldenrod", "gray75"),
   size.name = 0.6,
   size.title = rel(1),
   ndisplay = 50
