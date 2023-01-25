@@ -1,0 +1,30 @@
+"organisms","percent","count","key","diag_cat3"
+"Bacteroides sp.",2.5,1,NA,NA
+"Citrobacter freundii",2.5,1,NA,NA
+"Clostridium difficile",2.5,1,NA,NA
+"Culture Negative",12.5,5,NA,NA
+"Enterococcus avium",2.5,1,NA,NA
+"Enterococcus faecalis",7.5,3,NA,NA
+"Enterococcus faecium",35,14,NA,NA
+"Escherichia coli",7.5,3,NA,NA
+"Helicobacter pylori",2.5,1,NA,NA
+"Klebsiella pneumoniae",7.5,3,NA,NA
+"Proteus mirabilis",2.5,1,NA,NA
+"Pseudomonas aeruginosa",5,2,NA,NA
+"Staphylococcus aureus",7.5,3,NA,NA
+"Stenotrophmonas maltophilia",2.5,1,NA,NA
+NA,50,15,"Abdominal",NA
+NA,6.67,2,"Blood Stream",NA
+NA,6.67,2,"Lower Airways",NA
+NA,13.33,4,"Skin",NA
+NA,3.33,1,"Surgical Site",NA
+NA,20,6,"Urinary (not sexually tramsmitted)",NA
+NA,33.33,10,NA,"Abdominal"
+NA,6.67,2,NA,"Bacteremia"
+NA,10,3,NA,"Bacterial"
+NA,3.33,1,NA,"Colitis"
+NA,3.33,1,NA,"Gastritis"
+NA,3.33,1,NA,"Pneumonia"
+NA,3.33,1,NA,"Skin Abscess "
+NA,16.67,5,NA,"Surgical Site Infection"
+NA,20,6,NA,"Urinary Tract Infection"

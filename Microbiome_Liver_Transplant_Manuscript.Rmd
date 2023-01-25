@@ -215,22 +215,22 @@ test_abundance_unnest %>%
   arrange(desc(AUC)) %>% 
   select(-boot) %>% 
   mutate(
-    auc_label = paste0("AUC = ", formatC(round(AUC, 3)*100, digits = 0, format = "f"), "%"),
+    auc_label = paste0("AUC = ", formatC(round(AUC, 3), digits = 2, format = "f")),
     auc_label = case_when(
       grepl("enterococcus_rel_abundance", Input) ~ paste0(
         auc_label,
         " [",
-        paste0(formatC(pull(round(boot_ci(x = test_abundance[4][[1]], AUC, alpha = 0.05)[3][1, ], 2))*100, digits = 0, format = "f"), "%"),
+        formatC(pull(round(boot_ci(x = test_abundance[4][[1]], AUC, alpha = 0.05)[3][1, ], 2)), digits = 2, format = "f"),
         ", ",
-        paste0(formatC(pull(round(boot_ci(x = test_abundance[4][[1]], AUC, alpha = 0.05)[3][2, ], 2))*100, digits = 0, format = "f"), "%"),
+        formatC(pull(round(boot_ci(x = test_abundance[4][[1]], AUC, alpha = 0.05)[3][2, ], 2)), digits = 2, format = "f"),
         "]"
       ),
       grepl("enterobacterales_rel_abundance", Input) ~ paste0(
         auc_label,
         " [",
-        paste0(formatC(pull(round(boot_ci(x = test_abundance[1][[1]], AUC, alpha = 0.05)[3][1, ], 2))*100, digits = 0, format = "f"), "%"),
+        formatC(pull(round(boot_ci(x = test_abundance[1][[1]], AUC, alpha = 0.05)[3][1, ], 2)), digits = 2, format = "f"),
         ", ",
-        paste0(formatC(pull(round(boot_ci(x = test_abundance[1][[1]], AUC, alpha = 0.05)[3][2, ], 2))*100, digits = 0, format = "f"), "%"),
+        formatC(pull(round(boot_ci(x = test_abundance[1][[1]], AUC, alpha = 0.05)[3][2, ], 2)), digits = 2, format = "f"),
         "]"
       )
     ),
@@ -2513,7 +2513,7 @@ set.seed(1234)
 diversity_train_splsda <- mixOmics::splsda(diversity_metab_mat.train, diversity_metab_labs.train, ncomp = 5)
 
 # Performance assessment
-## 5-fold, 100-repeat cross validation
+## 5-fold, 50-repeat cross validation
 set.seed(1234)
 diversity_train_plsda_perf <-
   perf(
@@ -3615,8 +3615,8 @@ plotLoadings(
 ```
 
 ## Clinical Tables
-### Supplemental Figure 3: Flow Diagram
-```{r, supplemental-figure-3-flow-diagram, warning=FALSE, message=FALSE, fig.dim = c(12, 8)}
+### Supplemental Figure 1: Flow Diagram
+```{r, supplemental-figure-1-flow-diagram, warning=FALSE, message=FALSE, fig.dim = c(12, 8)}
 flow_chart <- 
   flow_exclusions(
   incl_counts = c(158, 130, 107, 25),
@@ -3631,7 +3631,7 @@ flow_chart
 flow_chart %>% 
   export_svg() %>% 
   charToRaw() %>% 
-  rsvg_pdf("./Results/Supplemental_Figure_4.pdf")
+  rsvg_pdf("./Results/Supplemental_Figure_1.pdf")
 ```
 
 ### Demographics
@@ -3689,7 +3689,7 @@ tab1_2_padjust3 <- tab1_2_padjust1 %>%
 write.csv(tab1_2_padjust3,"./Results/Demo_Table_1_padjust.csv", row.names = FALSE)
 ```
 
-### Culture
+### Culture: Supplemental Table 1
 ```{r, culture, warning=FALSE, message=FALSE}
 # Percentage of infections # 
   ##  where there is an infection within 30 days after transplant and not 0 days before
@@ -3864,7 +3864,7 @@ culture_tot <- bind_rows(cult_percent_infx_all,
   mutate(percent = round(percent, 2))
 
 # Read in csv to then append adjusted pvalues
-write.csv(culture_tot, "./Results/Culture_Table_1.csv", row.names = FALSE)
+write.csv(culture_tot, "./Results/Supplemental_Table_1.csv", row.names = FALSE)
 ```
 
 ### Antibiotics
@@ -3950,7 +3950,7 @@ abx_tab1_2_padjust3 <- abx_tab1_2_padjust1 %>%
 write.csv(abx_tab1_2_padjust3, "./Results/ABX_Table_1_padjust.csv", row.names = FALSE)
 ```
 
-### Miscellaneous Statistics
+### Miscellaneous Statistics: Supplemental Table 2
 ```{r, miscellaneous-stats, warning=FALSE, message=FALSE}
 # Expansions and Infections Stats
 expan_infx_stats <-
@@ -3977,7 +3977,7 @@ peri_matrix_all %>%
 
 expan_infx_stats
 
-write.csv(expan_infx_stats, "./Results/Appendix_Table_1.csv", row.names = FALSE)
+write.csv(expan_infx_stats, "./Results/Supplemental_Table_2.csv", row.names = FALSE)
 ```
 
 ### Save Data Image
