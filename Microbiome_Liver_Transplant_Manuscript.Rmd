@@ -406,7 +406,7 @@ ecoc_expan_volcano_labcol <- qual_tot_ecoc_expan %>%
   mutate(color = ifelse(log2fc_val < 0, "#389458", "gray47"))
 
 # Volcano Plot (adjusted)
-set.seed(123456)
+set.seed(456)
 volcano_adj_ecoc_expan <-
 EnhancedVolcano(qual_tot_ecoc_expan,
                 lab = rownames(qual_tot_ecoc_expan),
@@ -415,15 +415,16 @@ EnhancedVolcano(qual_tot_ecoc_expan,
                 title = NULL,
                 pCutoff = 0.05,
                 FCcutoff = 0.75,
-                pointSize = 4,
-                labSize = 4,
+                pointSize = 6,
+                labSize = 8,
+                axisLabSize = 32,
                 labCol = ecoc_expan_volcano_labcol$color,
                 caption = NULL,
                 colAlpha = 0.65,
                 col = c("gray75", c("#D4CA15", "#912777", "#1238E3")),
                 xlim = c(-2.5, 4),
                 ylim = c(0, 8),
-                legendPosition = "right",
+                legendPosition = "none",
                 legendLabels = c(expression(p.adj > 0.05*";" ~ Log[2] ~ FC < "\u00B1"*0.75),
                           expression(p.adj > 0.05*";" ~ Log[2] ~ FC >= "\u00B1"*0.75),
                           expression(p.adj <= 0.05*";" ~ Log[2] ~ FC < "\u00B1"*0.75),
@@ -440,27 +441,26 @@ EnhancedVolcano(qual_tot_ecoc_expan,
   theme(
     axis.text = et(color = "black"),
     legend.text = et(hjust = 0),
-    plot.margin = unit(c(0, 4, 2, 4), "cm")
+    plot.margin = unit(c(0, 0, 0, 0), "cm")
   ) +
   labs(subtitle = NULL) +
   annotate("segment", x = 0.8, xend = 3, y = 7.95, yend = 7.95, 
            arrow = arrow(), size = 2, color = "gray67") +
-  annotate("text", x = 1.65, y = 8.15, label = "No Expansion", size = 6, color = "gray67") +
+  annotate("text", x = 1.65, y = 8.15, label = "No Expansion", size = 9, color = "gray67") +
   annotate("rect", xmin = 0.75, xmax = Inf, ymin = -log(0.05, base = 10), ymax = Inf,
            alpha = .1, fill = "gray87") +
   annotate("segment", x = -0.8, xend = -2.5, y = 7.95, yend = 7.95, 
            arrow = arrow(), size = 2, color = "#389458") +
-  annotate("text", x = -1.55, y = 8.15, label = "Expansion", size = 6, color = "#389458") +
+  annotate("text", x = -1.55, y = 8.15, label = "Expansion", size = 9, color = "#389458") +
   annotate("rect", xmin = -0.75, xmax = -Inf, ymin = -log(0.05, base = 10), ymax = Inf,
            alpha = .1, fill = "#389458") +
   guides(color = guide_legend(nrow = 4),
          shape = guide_legend(nrow = 4)) +
-  ggtitle("Enterococcus Expansion") +
   scale_y_continuous(expand = expansion(add = c(0, 0.15)))
 
 volcano_adj_ecoc_expan
 
-ggsave(plot = volcano_adj_ecoc_expan, filename = "./Results/Figure_5A.pdf", width = 24, height = 8) 
+ggsave(plot = volcano_adj_ecoc_expan, filename = "./Results/Figure_5A.pdf", width = 24, height = 11) 
 ```
 
 ### Enterococcus Expansion: Distribution
@@ -958,6 +958,57 @@ pdf(file = "./Results/Figure_1E.pdf", height = 6, width = 7)
 gg_alpha_richness
 invisible(dev.off())
 
+#### Plot Lachnospiraceae ####
+set.seed(456)
+gg_lach_rel_abd <- phylo_rel_abd %>% 
+  filter(organism == "Lachnospiraceae") %>% 
+  group_by(organism) %>% 
+  mutate(db = factor(db, levels = c("Liver Transplant", "Healthy Donor"))) %>% 
+  ggplot(., aes(x = diversity_group_abv, 
+                y = pctseqs, 
+                color = diversity_group_abv, 
+                fill = db)) +
+  geom_boxplot(outlier.colour = NA,
+               alpha = 0.35) +
+  geom_jitter(width = 0.2, size = 2.5, alpha = 0.65)+
+  stat_compare_means(comparisons = diversity_comps,
+                     tip.length = 0.01,
+                     symnum.args = symnum.args,
+                     method.args = list(alternative = "two.sided",
+                                        exact = FALSE),
+                     label.y = c(0.65, 0.71, 0.76, 0.82)
+                     ) +
+  theme_bw() +
+  theme(
+    panel.grid = eb(),
+    axis.title.y = et(size = 14, color = "black"),
+    axis.title.x = eb(),
+    axis.text = et(size = 12, color = "black"),
+    plot.margin = margin(t = 5,  # Top margin
+                         r = 5,  # Right margin
+                         b = 5,  # Bottom margin
+                         l = 5), # Left margin
+    panel.border = eb(),
+    axis.line = el(color = 'black')
+  ) +
+  ylab(~atop(paste(italic("Lachnospiraceae")), paste("MetaPhlAn4 Relative Abundance"))) +
+  scale_fill_manual(values = rev(pirate_colors)) +
+  scale_color_manual(values = diversity_group_colors) +
+  guides(fill = guide_legend("Cohort"),
+         color = guide_legend("Diversity Group",
+                              override.aes = aes(label = "")))+
+  scale_y_continuous(breaks = seq(0,1,0.1),
+                     expand = expansion(mult = c(0.01, 0.035)),
+                     labels = scales::percent_format(accuracy = 1)) +
+  coord_cartesian(xlim = c(1.1,3.9))
+  
+  
+gg_lach_rel_abd
+
+pdf(file = "./Results/Figure_1F.pdf", height = 6, width = 7)
+gg_lach_rel_abd
+invisible(dev.off())
+
 #### Plot Enterococcus ####
 set.seed(456)
 gg_ecoc_rel_abd <- phylo_rel_abd %>% 
@@ -1006,7 +1057,7 @@ gg_ecoc_rel_abd <- phylo_rel_abd %>%
   
 gg_ecoc_rel_abd
 
-pdf(file = "./Results/Figure_1F.pdf", height = 6, width = 7)
+pdf(file = "./Results/Figure_1G.pdf", height = 6, width = 7)
 gg_ecoc_rel_abd
 invisible(dev.off())
 
@@ -1057,7 +1108,7 @@ gg_ebac_rel_abd <- phylo_rel_abd %>%
   
 gg_ebac_rel_abd
 
-pdf(file = "./Results/Figure_1G.pdf", height = 6, width = 7)
+pdf(file = "./Results/Figure_1H.pdf", height = 6, width = 7)
 gg_ebac_rel_abd
 invisible(dev.off())
 
@@ -1108,59 +1159,8 @@ gg_bact_rel_abd <- phylo_rel_abd %>%
   
 gg_bact_rel_abd
 
-pdf(file = "./Results/Figure_1H.pdf", height = 6, width = 7)
-gg_bact_rel_abd
-invisible(dev.off())
-
-#### Plot Lachnospiraceae ####
-set.seed(456)
-gg_lach_rel_abd <- phylo_rel_abd %>% 
-  filter(organism == "Lachnospiraceae") %>% 
-  group_by(organism) %>% 
-  mutate(db = factor(db, levels = c("Liver Transplant", "Healthy Donor"))) %>% 
-  ggplot(., aes(x = diversity_group_abv, 
-                y = pctseqs, 
-                color = diversity_group_abv, 
-                fill = db)) +
-  geom_boxplot(outlier.colour = NA,
-               alpha = 0.35) +
-  geom_jitter(width = 0.2, size = 2.5, alpha = 0.65)+
-  stat_compare_means(comparisons = diversity_comps,
-                     tip.length = 0.01,
-                     symnum.args = symnum.args,
-                     method.args = list(alternative = "two.sided",
-                                        exact = FALSE),
-                     label.y = c(0.65, 0.71, 0.76, 0.82)
-                     ) +
-  theme_bw() +
-  theme(
-    panel.grid = eb(),
-    axis.title.y = et(size = 14, color = "black"),
-    axis.title.x = eb(),
-    axis.text = et(size = 12, color = "black"),
-    plot.margin = margin(t = 5,  # Top margin
-                         r = 5,  # Right margin
-                         b = 5,  # Bottom margin
-                         l = 5), # Left margin
-    panel.border = eb(),
-    axis.line = el(color = 'black')
-  ) +
-  ylab(~atop(paste(italic("Lachnospiraceae")), paste("MetaPhlAn4 Relative Abundance"))) +
-  scale_fill_manual(values = rev(pirate_colors)) +
-  scale_color_manual(values = diversity_group_colors) +
-  guides(fill = guide_legend("Cohort"),
-         color = guide_legend("Diversity Group",
-                              override.aes = aes(label = "")))+
-  scale_y_continuous(breaks = seq(0,1,0.1),
-                     expand = expansion(mult = c(0.01, 0.035)),
-                     labels = scales::percent_format(accuracy = 1)) +
-  coord_cartesian(xlim = c(1.1,3.9))
-  
-  
-gg_lach_rel_abd
-
 pdf(file = "./Results/Figure_1I.pdf", height = 6, width = 7)
-gg_lach_rel_abd
+gg_bact_rel_abd
 invisible(dev.off())
 
 #### Plot Oscillospiraceae ####
@@ -2444,7 +2444,7 @@ ggboxplot(metab_boxplot_ecoc_expan,
     facet_wrap(~compound, scales = "free_y", nrow = 2) +
     annotate("segment", x = 0.35, xend = 0.35, y = 0, yend = Inf, colour = "black", linewidth = 1) +
     annotate("segment", x = 0.35, xend = Inf, y = 0, yend = 0, colour = "black") +
-    stat_pvalue_manual(metab_boxplot_stats_ecoc_expan, label = "{p.adj}", bracket.size = 0) +
+    stat_pvalue_manual(metab_boxplot_stats_ecoc_expan, label = "{p.adj}", bracket.size = 0.5) +
     geom_point(data = metab_boxplot_ecoc_expan,
                aes(x = enterococcus_expansion, y = mvalue__mM, fill = enterococcus_expansion),
                position = position_jitter(width = 0.2),
@@ -3143,17 +3143,17 @@ plotIndiv(
   X.label = paste0("Component 1 (", round(diversity_train_splsda_final$prop_expl_var$X[1] * 100), "%)"),
   Y.label = paste0("Component 2 (", round(diversity_train_splsda_final$prop_expl_var$X[2] * 100), "%)")
 ) 
-addtable2plot(
-  y = -4.68,
-  x = min(diversity_train_splsda_final$variates$X[,1])*1.1,
-  diversity_confusion_df,
-  bty = "o",
-  display.rownames = TRUE,
-  hlines = TRUE,
-  vlines = TRUE,
-  cex = 0.75,
-  bg = "white"
-)
+# addtable2plot(
+#   y = -4.68,
+#   x = min(diversity_train_splsda_final$variates$X[,1])*1.1,
+#   diversity_confusion_df,
+#   bty = "o",
+#   display.rownames = TRUE,
+#   hlines = TRUE,
+#   vlines = TRUE,
+#   cex = 1.35,
+#   bg = "white"
+# )
 text(
   y = -6.5,
   x = min(diversity_train_splsda_final$variates$X[,1])*1.1,
@@ -3161,44 +3161,44 @@ text(
                     paste0(formatC(round(diversity_cm$overall[1], 3)*100, digits = 1, format = "f"), "%"), " [",
                     paste0(formatC(round(diversity_cm$overall[3], 3)*100, digits = 1, format = "f"), "%"),", ",
                     paste0(formatC(round(diversity_cm$overall[4], 3)*100, digits = 1, format = "f"), "%"),"]"),
-    cex = 1.05, adj = 0)
+    cex = 1.35, adj = 0)
 
 text(
   y = 3,
   x = 0.5,
   paste0("Low Diversity ACC = ", round(diversity_epi$balanced.accuracy[1]*100, 1), "%"),
-    cex = 1.05, adj = 0, col = "#3A001E")
+    cex = 1.35, adj = 0, col = "#3A001E")
 text(
   y = 2.7,
   x = 0.5,
   paste0("Low Diversity Sens. = ", round(diversity_epi$precision[1]*100, 1), "%"),
-    cex = 1.05, adj = 0, col = "#3A001E")
+    cex = 1.35, adj = 0, col = "#3A001E")
 text(
   y = 2.4,
   x = 0.5,
   paste0("Low Diversity Spec. = ", round(diversity_epi$specificity[1]*100, 1), "%"),
-    cex = 1.05, adj = 0, col = "#3A001E")
+    cex = 1.35, adj = 0, col = "#3A001E")
 # text(
 #   y = 2.1,
 #   x = 0.5,
 #   paste0("Low Diversity OR = ", round(diversity_epi$DOR[1], 1)),
-#     cex = 1.05, adj = 0, col = "#3A001E")
+#     cex = 1.35, adj = 0, col = "#3A001E")
 
 text(
   y = -5.5,
   x = 0,
   paste0("Medium Diversity ACC = ", round(diversity_epi$balanced.accuracy[2]*100, 1), "%"),
-    cex = 1.05, adj = 0, col = "#8A0246")
+    cex = 1.35, adj = 0, col = "#8A0246")
 text(
   y = -5.8,
   x = 0,
   paste0("Medium Diversity Sens. = ", round(diversity_epi$precision[2]*100, 1), "%"),
-    cex = 1.05, adj = 0, col = "#8A0246")
+    cex = 1.35, adj = 0, col = "#8A0246")
 text(
   y = -6.1,
   x = 0,
   paste0("Medium Diversity Spec. = ", round(diversity_epi$specificity[2]*100, 1), "%"),
-    cex = 1.05, adj = 0, col = "#8A0246")
+    cex = 1.35, adj = 0, col = "#8A0246")
 # text(
 #   y = -7.4,
 #   x = 0,
@@ -3209,22 +3209,22 @@ text(
   y = 3,
   x = min(diversity_train_splsda_final$variates$X[,1])*1.05,
   paste0("High Diversity ACC = ", round(diversity_epi$balanced.accuracy[3]*100, 1), "%"),
-    cex = 1.05, adj = 0, col = "#C20463")
+    cex = 1.35, adj = 0, col = "#C20463")
 text(
   y = 2.7,
   x = min(diversity_train_splsda_final$variates$X[,1])*1.05,
   paste0("High Diversity Sens. = ", round(diversity_epi$precision[3]*100, 1), "%"),
-    cex = 1.05, adj = 0, col = "#C20463")
+    cex = 1.35, adj = 0, col = "#C20463")
 text(
   y = 2.4,
   x = min(diversity_train_splsda_final$variates$X[,1])*1.05,
   paste0("High Diversity Spec. = ", round(diversity_epi$specificity[3]*100, 1), "%"),
-    cex = 1.05, adj = 0, col = "#C20463")
+    cex = 1.35, adj = 0, col = "#C20463")
 # text(
 #   y = 2.1,
 #   x = min(diversity_train_splsda_final$variates$X[,1])*1.05,
 #   paste0("High Diversity OR = ", round(diversity_epi$DOR[3], 1)),
-#     cex = 1.05, adj = 0, col = "#C20463")
+#     cex = 1.35, adj = 0, col = "#C20463")
 
 # Figure 6B
 plotIndiv(
@@ -3244,17 +3244,17 @@ plotIndiv(
   X.label = paste0("Component 1 (", round(infx_train_splsda_final$prop_expl_var$X[1] * 100), "%)"),
   Y.label = paste0("Component 2 (", round(infx_train_splsda_final$prop_expl_var$X[2] * 100), "%)")
 ) 
-addtable2plot(
-  y = max(infx_train_splsda_final$variates$X[,2])*0.1,
-  x = min(infx_train_splsda_final$variates$X[,1]),
-  infx_confusion_df,
-  bty = "o",
-  display.rownames = TRUE,
-  hlines = TRUE,
-  vlines = TRUE,
-  cex = 0.75,
-  bg = "white"
-)
+# addtable2plot(
+#   y = max(infx_train_splsda_final$variates$X[,2])*0.1,
+#   x = min(infx_train_splsda_final$variates$X[,1]),
+#   infx_confusion_df[,1:2],
+#   bty = "o",
+#   display.rownames = TRUE,
+#   hlines = TRUE,
+#   vlines = TRUE,
+#   cex = 1.35,
+#   bg = "white"
+# )
 text(
   y = -4,
   x = -2.75,
@@ -3270,7 +3270,7 @@ text(
                     round(infx_cm$overall[1]*100, 1), "% [",
                     round(infx_cm$overall[3]*100, 1), "%, ",
                     round(infx_cm$overall[4]*100, 1), "%]"),
-    cex = 1.05, adj = 0)
+    cex = 1.35, adj = 0)
 text(
   y = max(infx_train_splsda_final$variates$X[,2])*0.9,
   x = min(infx_train_splsda_final$variates$X[,1]),
@@ -3278,7 +3278,7 @@ text(
                     paste0(formatC(round(infx_epi$detail[2][3,], 3)*100, digits = 1, format = "f"), "%"), " [",
                     paste0(formatC(round(infx_epi$detail[3][3,], 3)*100, digits = 1, format = "f"), "%"),", ",
                     paste0(formatC(round(infx_epi$detail[4][3,], 3)*100, digits = 1, format = "f"), "%"),"]"),
-    cex = 1.05, adj = 0)
+    cex = 1.35, adj = 0)
 text(
   y = max(infx_train_splsda_final$variates$X[,2])*0.8,
   x = min(infx_train_splsda_final$variates$X[,1]),
@@ -3286,7 +3286,7 @@ text(
                     paste0(formatC(round(infx_epi$detail[2][4,], 3)*100, digits = 1, format = "f"), "%"), " [",
                     paste0(formatC(round(infx_epi$detail[3][4,], 3)*100, digits = 1, format = "f"), "%"),", ",
                     paste0(formatC(round(infx_epi$detail[4][4,], 3)*100, digits = 1, format = "f"), "%"),"]"),
-    cex = 1.05, adj = 0)
+    cex = 1.35, adj = 0)
 text(
   y = max(infx_train_splsda_final$variates$X[,2])*0.7,
   x = min(infx_train_splsda_final$variates$X[,1]),
@@ -3294,7 +3294,7 @@ text(
                     formatC(round(infx_epi$detail[2][6,], 3), digits = 1, format = "f"),  " [",
                     formatC(round(infx_epi$detail[3][6,], 3), digits = 1, format = "f"), ", ",
                     formatC(round(infx_epi$detail[4][6,], 3), digits = 1, format = "f"), "]"),
-    cex = 1.05, adj = 0)
+    cex = 1.35, adj = 0)
 
 invisible(dev.off())
 }
@@ -3426,7 +3426,7 @@ plotIndiv(
 addtable2plot(
   y = max(infx_train_splsda_final$variates$X[,2])*0.1,
   x = min(infx_train_splsda_final$variates$X[,1]),
-  infx_confusion_df,
+  infx_confusion_df[,1:2],
   bty = "o",
   display.rownames = TRUE,
   hlines = TRUE,
@@ -3483,9 +3483,9 @@ diversity_train_splsda_final$loadings$X <- abs(diversity_train_splsda_final$load
 
 # Combine Supplemental Figures 2A + 2B
 
-pdf(file = "./Results/Supplemental_Figure_2.pdf",
+{pdf(file = "./Results/Supplemental_Figure_2.pdf",
          height = 8, 
-         width = 10)
+         width = 11)
 
 par(mfrow = c(1,3))
 
@@ -3496,8 +3496,8 @@ plotLoadings(
   method = 'mean',
   comp = 1,
   legend = FALSE,
-  legend.col = c(c("#3A001E", "#8A0246", "#C20463")),
-  size.name = 0.6,
+  legend.col = c("#EDE342", "#F69A97", "#FF51EB"),
+  size.name = 1.1,
   size.title = rel(1),
   ndisplay = 50
 )
@@ -3508,14 +3508,14 @@ plotLoadings(
   contrib = 'max',
   method = 'mean',
   comp = 2,
-  legend.col = c("#3A001E", "#8A0246", "#C20463"),
-  size.name = 0.6,
+  legend.col = c("#EDE342", "#F69A97", "#FF51EB"),
+  size.name = 1.1,
   size.title = rel(1),
   ndisplay = 50
 )
 
 invisible(dev.off())
-
+}
 
 par(mfrow = c(1,3))
 
@@ -3526,7 +3526,7 @@ plotLoadings(
   method = 'mean',
   comp = 1,
   legend = FALSE,
-  legend.col = c(c("#3A001E", "#8A0246", "#C20463")),
+  legend.col = c("#EDE342", "#F69A97", "#FF51EB"),
   size.name = 0.6,
   size.title = rel(1),
   ndisplay = 50
@@ -3538,7 +3538,7 @@ plotLoadings(
   contrib = 'max',
   method = 'mean',
   comp = 2,
-  legend.col = c("#3A001E", "#8A0246", "#C20463"),
+  legend.col = c("#EDE342", "#F69A97", "#FF51EB"),
   size.name = 0.6,
   size.title = rel(1),
   ndisplay = 50
@@ -3552,9 +3552,9 @@ infx_train_splsda_final$loadings$X <- abs(infx_train_splsda_final$loadings$X)
 
 # Combine Supplemental Figures 2A + 2B
 
-pdf(file = "./Results/Supplemental_Figure_3.pdf",
+{pdf(file = "./Results/Supplemental_Figure_3.pdf",
          height = 8, 
-         width = 10)
+         width = 11)
 
 par(mfrow = c(1,3))
 
@@ -3566,7 +3566,7 @@ plotLoadings(
   comp = 1,
   legend = FALSE,
   legend.col = c("goldenrod", "gray75"),
-  size.name = 0.6,
+  size.name = 1.1,
   size.title = rel(1),
   ndisplay = 50
 )
@@ -3578,12 +3578,12 @@ plotLoadings(
   method = 'mean',
   comp = 2,
   legend.col = c("goldenrod", "gray75"),
-  size.name = 0.6,
+  size.name = 1.1,
   size.title = rel(1),
   ndisplay = 50
 )
 
-invisible(dev.off())
+invisible(dev.off())}
 
 par(mfrow = c(1,3))
 
@@ -3961,24 +3961,159 @@ peri_matrix_all %>%
          ebac_infx = enterobacterales_infection,
          ebac_infx = ifelse(ebac_infx >= 1, 1, 0)) %>% 
   select(enterococcus_rel_abundance, enterobacterales_rel_abundance, ecoc_infx, ebac_infx) %>% 
-  summarise(ecoc_expan_above_20_pct = sum(enterococcus_rel_abundance >= 0.2),
-            ecoc_expan_above_cutpoint = sum(enterococcus_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[2]),
+  summarise(ecoc_expan_above_cutpoint = sum(enterococcus_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[2]),
             ecoc_infx_ecoc_below_cutpoint = sum(ecoc_infx == 1 & enterococcus_rel_abundance < optimal_cutpoint_rel$optimal_cutpoint[2], na.rm=T),
             ecoc_infx_ecoc_above_cutpoint = sum(ecoc_infx == 1 & enterococcus_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[2], na.rm=T),
-            
-            ebac_expan_above_5_pct = sum(enterobacterales_rel_abundance >= 0.05),
+            ecoc_noinfx_ecoc_below_cutpoint = sum(ecoc_infx == 0 & enterococcus_rel_abundance < optimal_cutpoint_rel$optimal_cutpoint[2], na.rm=T),
+            ecoc_noinfx_ecoc_above_cutpoint = sum(ecoc_infx == 0 & enterococcus_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[2], na.rm=T),
             ebac_expan_above_cutpoint = sum(enterobacterales_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[1]),
             ebac_infx_ebac_below_cutpoint = sum(ebac_infx == 1 & enterobacterales_rel_abundance < optimal_cutpoint_rel$optimal_cutpoint[1], na.rm=T),
-            ebac_infx_ebac_above_cutpoint = sum(ebac_infx == 1 & enterobacterales_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[1], na.rm=T)) %>%
+            ebac_infx_ebac_above_cutpoint = sum(ebac_infx == 1 & enterobacterales_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[1], na.rm=T),
+            ebac_noinfx_ebac_below_cutpoint = sum(ebac_infx == 0 & enterobacterales_rel_abundance < optimal_cutpoint_rel$optimal_cutpoint[1], na.rm=T),
+            ebac_noinfx_ebac_above_cutpoint = sum(ebac_infx == 0 & enterobacterales_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[1], na.rm=T)) %>%
   rownames_to_column(var = "rowname") %>% 
   pivot_longer(-rowname, names_to = "metric", values_to = "count") %>% 
   mutate(percent = round((count / 107) * 100, 2)) %>% 
   select(-rowname)
 
-expan_infx_stats
+ecoc_infx_confusion <- expan_infx_stats %>% 
+  filter(metric %in% c(
+    "ecoc_infx_ecoc_below_cutpoint",
+    "ecoc_infx_ecoc_above_cutpoint",
+    "ecoc_noinfx_ecoc_below_cutpoint",
+    "ecoc_noinfx_ecoc_above_cutpoint"
+  )) %>% 
+  select(metric, count) %>% 
+  pivot_wider(names_from = metric, values_from = count)
 
-write.csv(expan_infx_stats, "./Results/Supplemental_Table_2.csv", row.names = FALSE)
+ecoc_infx_confusion_cnfs <- data.frame("Enterococcus" = c("Infection", "No Infection"),
+                                       "Greater Than Cutpoint" = c(ecoc_infx_confusion$ecoc_infx_ecoc_above_cutpoint,
+                                                                   ecoc_infx_confusion$ecoc_noinfx_ecoc_above_cutpoint),
+                                       "Less Than Cutpoint" = c(ecoc_infx_confusion$ecoc_infx_ecoc_below_cutpoint,
+                                                                ecoc_infx_confusion$ecoc_noinfx_ecoc_below_cutpoint))
+
+ecoc_infx_confusion_cnfs <- ecoc_infx_confusion_cnfs %>% 
+  mutate(sensitivity = round(ecoc_infx_confusion_cnfs[1,2]/(ecoc_infx_confusion_cnfs[1,2] + ecoc_infx_confusion_cnfs[1,3]), 3),
+         specificity = round(ecoc_infx_confusion_cnfs[2,3]/(ecoc_infx_confusion_cnfs[2,3] + ecoc_infx_confusion_cnfs[2,2]), 3),
+         odds_ratio = round((ecoc_infx_confusion_cnfs[1,2]/ecoc_infx_confusion_cnfs[1,3])/(ecoc_infx_confusion_cnfs[2,2]/ecoc_infx_confusion_cnfs[2,3]), 3))
+
+write.csv(ecoc_infx_confusion_cnfs, "./Results/Supplemental_Table_2.csv", row.names = FALSE)
+
+
+ebac_infx_confusion <- expan_infx_stats %>% 
+  filter(metric %in% c(
+    "ebac_infx_ebac_below_cutpoint",
+    "ebac_infx_ebac_above_cutpoint",
+    "ebac_noinfx_ebac_below_cutpoint",
+    "ebac_noinfx_ebac_above_cutpoint"
+  )) %>% 
+  select(metric, count) %>% 
+  pivot_wider(names_from = metric, values_from = count)
+
+ebac_infx_confusion_cnfs <- data.frame("Enterobacterales" = c("Infection", "No Infection"),
+                                       "Greater Than Cutpoint" = c(ebac_infx_confusion$ebac_infx_ebac_above_cutpoint,
+                                                                   ebac_infx_confusion$ebac_noinfx_ebac_above_cutpoint),
+                                       "Less Than Cutpoint" = c(ebac_infx_confusion$ebac_infx_ebac_below_cutpoint,
+                                                                ebac_infx_confusion$ebac_noinfx_ebac_below_cutpoint))
+
+ebac_infx_confusion_cnfs <- ebac_infx_confusion_cnfs %>% 
+  mutate(sensitivity = round(ebac_infx_confusion_cnfs[1,2]/(ebac_infx_confusion_cnfs[1,2] + ebac_infx_confusion_cnfs[1,3]), 3),
+         specificity = round(ebac_infx_confusion_cnfs[2,3]/(ebac_infx_confusion_cnfs[2,3] + ebac_infx_confusion_cnfs[2,2]), 3),
+         odds_ratio = round((ebac_infx_confusion_cnfs[1,2]/ebac_infx_confusion_cnfs[1,3])/(ebac_infx_confusion_cnfs[2,2]/ebac_infx_confusion_cnfs[2,3]), 3))
+
+write.csv(ebac_infx_confusion_cnfs, "./Results/Supplemental_Table_3.csv", row.names = FALSE)
 ```
+
+### Supplemental Figure 4: Fecal Sample Collected from Transplant
+```{r, sample-relative-to-transplant,warning=FALSE, message=FALSE, fig.dim = c(12, 8)}
+sample_days <- 
+  metaphlan_df_sumry %>% 
+  group_by(sampleID) %>% 
+  slice(1) %>% 
+  filter(db == "Liver Transplant") %>% 
+  select(sampleID, diversity_group) %>% 
+  left_join(sample_lookup %>% 
+              select(sampleID, sample_days_from_transplant)) %>% 
+  ungroup()
+
+
+# Quartiles of samples
+clin_quartiles <-
+  sample_days %>% 
+  select(sample_days_from_transplant) %>% 
+  summarise(minimum = min(sample_days_from_transplant, na.rm = T),
+            lower = unname(quantile(sample_days_from_transplant, probs = .25, na.rm = T)),
+            median = unname(quantile(sample_days_from_transplant, probs = .5, na.rm = T)),
+            upper = unname(quantile(sample_days_from_transplant, probs = 0.75, na.rm = T)),
+            maximum = max(sample_days_from_transplant, na.rm = T)) %>% 
+  mutate(placeholder = 1) %>% 
+  pivot_longer(!placeholder, names_to = "ranges", values_to = "value")
+
+
+
+sample_days_histogram <-
+sample_days %>% 
+  ggplot(., aes(x = sample_days_from_transplant)) +
+  geom_histogram(color="black", fill="grey", binwidth = 1) +
+  geom_vline(aes(xintercept = 0), color="orangered", linetype="solid", size = 1.2) +
+  geom_vline(aes(xintercept = median(sample_days_from_transplant, na.rm = TRUE)), color = "cyan2", linetype="dashed", size = 1.2) +
+  geom_text(aes(x = median(sample_days_from_transplant, na.rm = TRUE), y = 12.5), color = "cyan2", label = paste0("Median = ",
+                                                                                           clin_quartiles %>%
+                                                                                             filter(ranges == "median") %>%
+                                                                                             select(value),
+                                                                                           " days"), nudge_x = 4) +
+  geom_text(label = "Transplant Date = Day 0", x = -4, y = 12.5, color="orangered") +
+  theme_bw()+
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_text(color = "black", size = 12),
+    axis.title = element_text(color = "black", size = 14),
+    legend.position = "none"
+  ) +
+  scale_x_continuous(breaks = seq(-7, 30, 5),
+                     limits = c(-7, 35)) +
+  ylab("Number of Samples\n")
+ 
+
+sample_days_boxplot <-
+sample_days %>% 
+ggplot(., aes(x = sample_days_from_transplant, y = diversity_group, fill = diversity_group)) + 
+  geom_vline(aes(xintercept = 0), color="orangered", linetype="solid", size = 1.2) +
+  geom_vline(aes(xintercept = median(sample_days_from_transplant, na.rm = TRUE)), color="cyan2", linetype="dashed", size = 1.2) +
+  geom_violin() +
+  geom_boxplot(alpha = 0.5, width = 0.15, outlier.shape = NA, fill = "white", color = "white") +
+  stat_compare_means(comparisons = list(c("High Diversity", "Medium Diversity"),
+                                        c("High Diversity", "Low Diversity"),
+                                        c("Medium Diversity", "Low Diversity")),
+                      bracket.size = 0.3,
+                     step.increase = 0.07
+                     ) +
+  theme_bw() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_text(color = "black", size = 12),
+    axis.text.y = element_text(color = "black", size = 12),
+    axis.ticks.y = element_blank(),
+    axis.title = element_text(color = "black", size = 14),
+    legend.position = "none"
+  ) +
+  scale_x_continuous(breaks = seq(-7, 30, 5),
+                     limits = c(-7, 35)) +
+  scale_fill_manual(values = c("#3A001E", "#8A0246", "#C20463")) +
+  ylab("Diversity Groups\n") +
+  xlab("\nDays to Sample")
+
+pdf(file = "./Results/Supplemental_Figure_4.pdf", height = 10, width = 12, onefile = F)
+
+gg.stack(sample_days_histogram,
+         sample_days_boxplot)
+
+dev.off()
+
+gg.stack(sample_days_histogram,
+         sample_days_boxplot)
+```
+
 
 ### Save Data Image
 ```{r save image, message=FALSE, warning=FALSE}
