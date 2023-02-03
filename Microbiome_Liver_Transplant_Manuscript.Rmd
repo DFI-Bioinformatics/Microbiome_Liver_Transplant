@@ -10,6 +10,7 @@ output:
     toc_float: true
     toc_depth: 3
     code_folding: hide
+bibliography: references.bib 
 editor_options: 
   chunk_output_type: console
 header-includes:
@@ -77,6 +78,7 @@ p_load(
   rsvg,                     # Flow table visualizer
   scales,                   # Scale functions for visualizations
   devtools,                 # To load packages from GitHub
+  datscience,               # Bibliography manager
   install = F
 )
 
