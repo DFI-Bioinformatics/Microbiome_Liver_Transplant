@@ -10,7 +10,6 @@ output:
     toc_float: true
     toc_depth: 3
     code_folding: hide
-bibliography: references.bib 
 editor_options: 
   chunk_output_type: console
 header-includes:
@@ -3478,20 +3477,20 @@ text(
     cex = 1.05, adj = 0)
 ```
 
-### Supplemental Figure 2A + 2B: Plot Loadings for Diversity Groups
-```{r, supplemental-figure-2-splsda-diversity-groups, fig.dim = c(14, 10), message=FALSE, warning=FALSE}
+### Supplemental Figure 3A + 3B: Plot Loadings for Diversity Groups
+```{r, supplemental-figure-3-splsda-diversity-groups, fig.dim = c(14, 10), message=FALSE, warning=FALSE}
 # Take absolute value to make diversity group loadings plot narrower
 diversity_train_splsda_final$loadings$X <- abs(diversity_train_splsda_final$loadings$X)
 
-# Combine Supplemental Figures 2A + 2B
+# Combine Supplemental Figures 3A + 3B
 
-{pdf(file = "./Results/Supplemental_Figure_2.pdf",
+{pdf(file = "./Results/Supplemental_Figure_3.pdf",
          height = 8, 
          width = 11)
 
 par(mfrow = c(1,3))
 
-# Supplmental Figure 2A
+# Supplmental Figure 3A
 plotLoadings(
   diversity_train_splsda_final,
   contrib = 'max',
@@ -3504,7 +3503,7 @@ plotLoadings(
   ndisplay = 50
 )
 
-# Supplmental Figure 2B
+# Supplmental Figure 3B
 plotLoadings(
   diversity_train_splsda_final,
   contrib = 'max',
@@ -3521,7 +3520,7 @@ invisible(dev.off())
 
 par(mfrow = c(1,3))
 
-# Supplmental Figure 2A
+# Supplmental Figure 3A
 plotLoadings(
   diversity_train_splsda_final,
   contrib = 'max',
@@ -3534,7 +3533,7 @@ plotLoadings(
   ndisplay = 50
 )
 
-# Supplmental Figure 2B
+# Supplmental Figure 3B
 plotLoadings(
   diversity_train_splsda_final,
   contrib = 'max',
@@ -3547,20 +3546,20 @@ plotLoadings(
 )
 ```
 
-### Supplemental Figure 3A + 3B: Plot Loadings for Any Bacterial Infection
-```{r, supplemental-figure-3-splsda-any-infection, fig.dim = c(14, 10), message=FALSE, warning=FALSE}
+### Supplemental Figure 4A + 4B: Plot Loadings for Any Bacterial Infection
+```{r, supplemental-figure-4-splsda-any-infection, fig.dim = c(14, 10), message=FALSE, warning=FALSE}
 # Take absolute value to make diversity group loadings plot narrower
 infx_train_splsda_final$loadings$X <- abs(infx_train_splsda_final$loadings$X)
 
-# Combine Supplemental Figures 2A + 2B
+# Combine Supplemental Figures 4A + 4B
 
-{pdf(file = "./Results/Supplemental_Figure_3.pdf",
+{pdf(file = "./Results/Supplemental_Figure_4.pdf",
          height = 8, 
          width = 11)
 
 par(mfrow = c(1,3))
 
-# Supplmental Figure 3A
+# Supplmental Figure 4A
 plotLoadings(
   infx_train_splsda_final,
   contrib = 'max',
@@ -3573,7 +3572,7 @@ plotLoadings(
   ndisplay = 50
 )
 
-# Supplmental Figure 3B
+# Supplmental Figure 4B
 plotLoadings(
   infx_train_splsda_final,
   contrib = 'max',
@@ -3589,7 +3588,7 @@ invisible(dev.off())}
 
 par(mfrow = c(1,3))
 
-# Supplmental Figure 3A
+# Supplmental Figure 4A
 plotLoadings(
   infx_train_splsda_final,
   contrib = 'max',
@@ -3602,7 +3601,7 @@ plotLoadings(
   ndisplay = 50
 )
 
-# Supplmental Figure 3B
+# Supplmental Figure 4B
 plotLoadings(
   infx_train_splsda_final,
   contrib = 'max',
@@ -3617,8 +3616,8 @@ plotLoadings(
 ```
 
 ## Clinical Tables
-### Supplemental Figure 1: Flow Diagram
-```{r, supplemental-figure-1-flow-diagram, warning=FALSE, message=FALSE, fig.dim = c(12, 8)}
+### Supplemental Figure 2: Flow Diagram
+```{r, supplemental-figure-2-flow-diagram, warning=FALSE, message=FALSE, fig.dim = c(12, 8)}
 flow_chart <- 
   flow_exclusions(
   incl_counts = c(158, 130, 107, 25),
@@ -3633,7 +3632,7 @@ flow_chart
 flow_chart %>% 
   export_svg() %>% 
   charToRaw() %>% 
-  rsvg_pdf("./Results/Supplemental_Figure_1.pdf")
+  rsvg_pdf("./Results/Supplemental_Figure_2.pdf")
 ```
 
 ### Demographics
@@ -3999,7 +3998,7 @@ ecoc_infx_confusion_cnfs <- ecoc_infx_confusion_cnfs %>%
          specificity = round(ecoc_infx_confusion_cnfs[2,3]/(ecoc_infx_confusion_cnfs[2,3] + ecoc_infx_confusion_cnfs[2,2]), 3),
          odds_ratio = round((ecoc_infx_confusion_cnfs[1,2]/ecoc_infx_confusion_cnfs[1,3])/(ecoc_infx_confusion_cnfs[2,2]/ecoc_infx_confusion_cnfs[2,3]), 3))
 
-write.csv(ecoc_infx_confusion_cnfs, "./Results/Supplemental_Table_2.csv", row.names = FALSE)
+write.csv(ecoc_infx_confusion_cnfs, "./Results/Supplemental_Table_2A.csv", row.names = FALSE)
 
 
 ebac_infx_confusion <- expan_infx_stats %>% 
@@ -4023,10 +4022,10 @@ ebac_infx_confusion_cnfs <- ebac_infx_confusion_cnfs %>%
          specificity = round(ebac_infx_confusion_cnfs[2,3]/(ebac_infx_confusion_cnfs[2,3] + ebac_infx_confusion_cnfs[2,2]), 3),
          odds_ratio = round((ebac_infx_confusion_cnfs[1,2]/ebac_infx_confusion_cnfs[1,3])/(ebac_infx_confusion_cnfs[2,2]/ebac_infx_confusion_cnfs[2,3]), 3))
 
-write.csv(ebac_infx_confusion_cnfs, "./Results/Supplemental_Table_3.csv", row.names = FALSE)
+write.csv(ebac_infx_confusion_cnfs, "./Results/Supplemental_Table_2B.csv", row.names = FALSE)
 ```
 
-### Supplemental Figure 4: Fecal Sample Collected from Transplant
+### Supplemental Figure 1: Fecal Sample Collected from Transplant
 ```{r, sample-relative-to-transplant,warning=FALSE, message=FALSE, fig.dim = c(12, 8)}
 sample_days <- 
   metaphlan_df_sumry %>% 
@@ -4067,9 +4066,9 @@ sample_days %>%
   geom_text(label = "Transplant Date = Day 0", x = -4, y = 12.5, color="orangered") +
   theme_bw()+
   theme(
-    panel.grid = element_blank(),
-    axis.text = element_text(color = "black", size = 12),
-    axis.title = element_text(color = "black", size = 14),
+    panel.grid = eb(),
+    axis.text = et(color = "black", size = 12),
+    axis.title = et(color = "black", size = 14),
     legend.position = "none"
   ) +
   scale_x_continuous(breaks = seq(-7, 30, 5),
@@ -4092,11 +4091,11 @@ ggplot(., aes(x = sample_days_from_transplant, y = diversity_group, fill = diver
                      ) +
   theme_bw() +
   theme(
-    panel.grid = element_blank(),
-    axis.text.x = element_text(color = "black", size = 12),
-    axis.text.y = element_text(color = "black", size = 12),
-    axis.ticks.y = element_blank(),
-    axis.title = element_text(color = "black", size = 14),
+    panel.grid = eb(),
+    axis.text.x = et(color = "black", size = 12),
+    axis.text.y = et(color = "black", size = 12),
+    axis.ticks.y = eb(),
+    axis.title = et(color = "black", size = 14),
     legend.position = "none"
   ) +
   scale_x_continuous(breaks = seq(-7, 30, 5),
@@ -4105,7 +4104,7 @@ ggplot(., aes(x = sample_days_from_transplant, y = diversity_group, fill = diver
   ylab("Diversity Groups\n") +
   xlab("\nDays to Sample")
 
-pdf(file = "./Results/Supplemental_Figure_4.pdf", height = 10, width = 12, onefile = F)
+pdf(file = "./Results/Supplemental_Figure_1.pdf", height = 10, width = 12, onefile = F)
 
 gg.stack(sample_days_histogram,
          sample_days_boxplot)
@@ -4115,7 +4114,6 @@ dev.off()
 gg.stack(sample_days_histogram,
          sample_days_boxplot)
 ```
-
 
 ### Save Data Image
 ```{r save image, message=FALSE, warning=FALSE}
