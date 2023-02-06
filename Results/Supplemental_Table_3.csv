@@ -1,3 +1,0 @@
-"Enterobacterales","Greater.Than.Cutpoint","Less.Than.Cutpoint","sensitivity","specificity","odds_ratio"
-"Infection",8,0,1,0.798,Inf
-"No Infection",21,83,1,0.798,Inf
