@@ -1,9 +1,0 @@
-"metric","count","percent"
-"ecoc_expan_above_20_pct",43,40.19
-"ecoc_expan_above_cutpoint",44,41.12
-"ecoc_infx_ecoc_below_cutpoint",2,1.87
-"ecoc_infx_ecoc_above_cutpoint",15,14.02
-"ebac_expan_above_5_pct",18,16.82
-"ebac_expan_above_cutpoint",29,27.1
-"ebac_infx_ebac_below_cutpoint",0,0
-"ebac_infx_ebac_above_cutpoint",8,7.48
