@@ -10,6 +10,7 @@ output:
     toc_float: true
     toc_depth: 3
     code_folding: hide
+    df_print: paged
 editor_options: 
   chunk_output_type: console
 header-includes:
@@ -62,6 +63,9 @@ if (!require("magick", quietly = TRUE))
 if (!require("mltest", quietly = TRUE))
   install.packages("mltest")
 
+if (!require("biostatUtil", quietly = TRUE))
+  remotes::install_github("talhouklab/biostatUtil")
+
 library(pacman)
 p_load(
   factoextra,               # Dimension reduction
@@ -107,6 +111,10 @@ p_load(
   devtools,                 # To load packages from GitHub
   # datscience,               # Bibliography manager
   formatR,                  # Markdown code formatter
+  openxlsx,                 # Excel worksheet manipulator
+  biostatUtil,              # Mainly used for multi-level confusion matrix confidence intervals
+  irr,                      # Dependency package
+  rJava,                    # Dependency package
   install = FALSE
 )
 
@@ -133,64 +141,83 @@ opts_chunk$set(tidy.opts = list(width.cutoff = 60), tidy = TRUE)
 `%!in%` <- negate(`%in%`)
 
 # Running python in R
-## User must set path to their python library
-reticulate::use_python("/usr/bin/python3")
-
-# Customized lefse function
-source("./Data/run_lefse2.R")
+use_condaenv("base", required = TRUE)
 ```
 
 ## Import Data
 ### Load in all Metagenomic, Metabolomic and Clinical Data
 ```{r, load-in-data, message=FALSE, warning=FALSE}
 # 1) Load R image 
-# load('./Data/LT_Modeling.RData')
+load('./Data/LT_Modeling.RData')
 
-# OR #
-
-# 2) Individually Load R Objects
-
-# Sample lookup
-sample_lookup <- readRDS("./Data/sample_lookup.rds")
-
-# First samples from all patients
-first_samps <- readRDS("./Data/first_samps_anon.rds")
-
-# Simplified dataframe containing infection information and relative abundance of targeted taxa
-peri_matrix_all <- readRDS("./Data/peri_matrix_clin_all.rds")
-
-# Distinct detailed infection data 
-peri_criteria_best <- readRDS("./Data/peri_criteria_best_anon.rds")
-
-# All detailed infection data
-peri_criteria_all <- readRDS("./Data/peri_criteria_all_anon.rds")
-
-# NCBI taxonomy lookup
-tax_lookup <- readRDS("./Data/tax_lookup.rds")
-
-# Complete metaphlan dataframe for all patients and healthy donors
-metaphlan_df <- readRDS("./Data/metaphlan_anon.rds")
-
-# Metaphlan dataframe of patient samples
-metaphlan_peri_anon <- readRDS("./Data/metaphlan_peri_anon.rds")
-
-# Custom color palette
-metaphlan_pal <- getRdpPal(metaphlan_df)
-
-# Qualitative metabolomics
-metab_qual_anon <- readRDS("./Data/metab_qual_anonym.rds")
-
-# Quantitative metabolomics
-metab_quant_anon <- readRDS("./Data/metab_quant_anonym.rds")
-
+# # OR #
+# 
+# # 2) Individually Load R Objects
+# 
+# # Sample lookup
+# sample_lookup <- readRDS("./Data/sample_lookup.rds")
+# 
+# # First samples from all patients
+# first_samps <- readRDS("./Data/first_samps_anon.rds")
+# 
+# # Simplified dataframe containing infection information and relative abundance of targeted taxa
+# peri_matrix_all <- readRDS("./Data/peri_matrix_clin_all.rds")
+# 
+# # Distinct detailed infection data 
+# peri_criteria_best <- readRDS("./Data/peri_criteria_best_anon.rds")
+# 
+# # All detailed infection data
+# peri_criteria_all <- readRDS("./Data/peri_criteria_all_anon.rds")
+# 
+# # NCBI taxonomy lookup
+# tax_lookup <- readRDS("./Data/tax_lookup.rds")
+# 
+# # Complete metaphlan dataframe for all patients and healthy donors
+# metaphlan_df <- readRDS("./Data/metaphlan_anon.rds")
+# 
+# # Metaphlan dataframe of patient samples
+# metaphlan_peri_anon <- readRDS("./Data/metaphlan_peri_anon.rds")
+# 
+# # Custom color palette
+# metaphlan_pal <- getRdpPal(metaphlan_df)
+# 
+# # Qualitative metabolomics
+# metab_qual_anon <- readRDS("./Data/metab_qual_anonym.rds")
+# 
+# # Quantitative metabolomics
+# metab_quant_anon <- readRDS("./Data/metab_quant_anonym.rds")
+# 
 # Antibiotics data
-abx <- readRDS("./Data/abx_anon.rds")
-
+# 
+# abx <- readRDS("./Data/abx_anon.rds")
+# abx <- readRDS("./Data/original_cohort_abx.rds") 
+# 
 # Demographics data
-demo <- readRDS("./Data/demo_anon.rds")
-
-# Bile acid gene data
-ba_genes <- readRDS("./Data/bile_acid_genes.rds")
+# demo <- readRDS("./Data/demo_anon.rds")
+# 
+# # Bile acid gene data
+# ba_genes <- readRDS("./Data/bile_acid_genes.rds")
+# 
+# # CARD genes
+# card_dict <- readRDS("./Data/card_dict.rds")
+# 
+# card_dict <- card_dict %>%
+#   filter(dbsource == "card") %>%
+#   mutate(
+#     AMRGeneFamily = ifelse(
+#       AMRGeneFamily == "glycopeptide resistance gene cluster;van ligase",
+#       "glycopeptide resistance gene cluster;vanA",
+#       AMRGeneFamily
+#     ),
+#     AMRGeneFamily = gsub(
+#       pattern = ";",
+#       replacement = "\n",
+#       x = AMRGeneFamily
+#     )
+#   )
+# 
+# CARD data
+# card2 <- readRDS("./Data/card.rds")
 ```
 
 ## Figures
@@ -404,12 +431,12 @@ test_abundance_unnest %>%
   filter(subgroup2 == "Enterococcus") %>% 
   ggplot(aes(x = fpr, y = tpr, color = subgroup2)) +
   geom_line(size = 1.2) +
-  geom_text(aes(label = auc_label, x = 0.5, y = 0.16), show.legend = F, hjust = 0) +
-  geom_text(aes(label = acc_label, x = 0.5, y = 0.12), show.legend = F, hjust = 0) +
-  geom_text(aes(label = spec_label, x = 0.5, y = 0.08), show.legend = F, hjust = 0) +
-  geom_text(aes(label = sens_label, x = 0.5, y = 0.04), show.legend = F, hjust = 0) +
-  geom_text(aes(label = paste0("Cutpoint = ", round((optimal_cutpoint), digits = 3)*100, "%"), x = 0.5, y = 0.20), hjust = 0, show.legend = F) +
-  geom_text(aes(label = odds_label, x = 0.5, y = 0), show.legend = F, hjust = 0)+
+  geom_text(aes(label = auc_label, x = 0.45, y = 0.16), show.legend = F, hjust = 0, size = 6) +
+  geom_text(aes(label = acc_label, x = 0.45, y = 0.12), show.legend = F, hjust = 0, size = 6) +
+  geom_text(aes(label = spec_label, x = 0.45, y = 0.08), show.legend = F, hjust = 0, size = 6) +
+  geom_text(aes(label = sens_label, x = 0.45, y = 0.04), show.legend = F, hjust = 0, size = 6) +
+  geom_text(aes(label = paste0("Cutpoint = ", round((optimal_cutpoint), digits = 3)*100, "%"), x = 0.45, y = 0.2), hjust = 0, size = 6, show.legend = F) +
+  geom_text(aes(label = odds_label, x = 0.45, y = 0), show.legend = F, hjust = 0, size = 6)+
   theme_bw()+
   theme(
     axis.text = et(color = "black", size = 12),
@@ -419,7 +446,7 @@ test_abundance_unnest %>%
     legend.spacing.y = unit(0.5, 'cm'),
     legend.position = "none",
     panel.grid = eb(),
-    strip.text = et(size = 14, color = "#2dc46b", face = "bold"),
+    strip.text = et(size = 18, color = "#2dc46b", face = "bold"),
     strip.background = eb(),
     panel.border = eb(),
     panel.spacing.y = unit(20, "mm"),
@@ -436,12 +463,13 @@ test_abundance_unnest %>%
       column_to_rownames(var = "Enterococcus") %>%
       select(Expansion, `No Expansion` = No.Expansion) %>% 
       mutate(Total = rowSums(.))),
-    npcx = 0.25,
-    npcy = 0.5,
+    npcx = 0.15,
+    npcy = 0.6,
     hjust = 0,
     vjust = 1,
     table.rownames = TRUE,
     table.theme = ttheme_minimal(
+      base_size = 16,
       core = list(
         bg_params = list(col = "#2dc46b"),
         fg_params = list(col = "#2dc46b")
@@ -589,12 +617,12 @@ test_abundance_unnest %>%
   filter(subgroup2 == "Enterobacterales") %>% 
   ggplot(aes(x = fpr, y = tpr, color = subgroup2)) +
   geom_line(size = 1.2) +
-  geom_text(aes(label = auc_label, x = 0.5, y = 0.16), show.legend = F, hjust = 0) +
-  geom_text(aes(label = acc_label, x = 0.5, y = 0.12), show.legend = F, hjust = 0) +
-  geom_text(aes(label = spec_label, x = 0.5, y = 0.08), show.legend = F, hjust = 0) +
-  geom_text(aes(label = sens_label, x = 0.5, y = 0.04), show.legend = F, hjust = 0) +
-  geom_text(aes(label = paste0("Cutpoint = ", round((optimal_cutpoint), digits = 3)*100, "%"), x = 0.5, y = 0.20), hjust = 0, show.legend = F) +
-  geom_text(aes(label = odds_label, x = 0.5, y = 0), show.legend = F, hjust = 0)+
+  geom_text(aes(label = auc_label, x = 0.45, y = 0.16), show.legend = F, hjust = 0, size = 6) +
+  geom_text(aes(label = acc_label, x = 0.45, y = 0.12), show.legend = F, hjust = 0, size = 6) +
+  geom_text(aes(label = spec_label, x = 0.45, y = 0.08), show.legend = F, hjust = 0, size = 6) +
+  geom_text(aes(label = sens_label, x = 0.45, y = 0.04), show.legend = F, hjust = 0, size = 6) +
+  geom_text(aes(label = paste0("Cutpoint = ", round((optimal_cutpoint), digits = 3)*100, "%"), x = 0.45, y = 0.20), hjust = 0, size = 6, show.legend = F) +
+  geom_text(aes(label = odds_label, x = 0.45, y = 0), show.legend = F, hjust = 0, size = 6)+
   theme_bw()+
   theme(
     axis.text = et(color = "black", size = 12),
@@ -604,7 +632,7 @@ test_abundance_unnest %>%
     legend.spacing.y = unit(0.5, 'cm'),
     legend.position = "none",
     panel.grid = eb(),
-    strip.text = et(size = 14, color = "red", face = "bold"),
+    strip.text = et(size = 18, color = "red", face = "bold"),
     strip.background = eb(),
     panel.border = eb(),
     panel.spacing.y = unit(20, "mm"),
@@ -621,12 +649,13 @@ test_abundance_unnest %>%
       column_to_rownames(var = "Enterobacterales") %>%
       select(Expansion, `No Expansion` = No.Expansion) %>% 
       mutate(Total = rowSums(.))),
-    npcx = 0.25,
+    npcx = 0.15,
     npcy = 0.5,
     hjust = 0,
     vjust = 1,
     table.rownames = TRUE,
     table.theme = ttheme_minimal(
+      base_size = 16,
       core = list(
         bg_params = list(col = "red"),
         fg_params = list(col = "red")
@@ -882,9 +911,6 @@ write.csv(taxumap_taxonomy, "./Results/taxonomy.csv", row.names = FALSE)
 import sys
 
 print(sys.path)
-
-# USER MUST SET THEIR PATH TO THEIR LOCALLY INSTALLED TAXUMAP LOCATION
-sys.path.insert(0, '/Users/nick/Documents/taxumap/taxumap/')
 
 from taxumap.taxumap_base import Taxumap
 
@@ -1827,37 +1853,6 @@ gg.stack(gg_metaphlan,
          gg_ba_genes,
          heights = c(1, 8))
 dev.off()
-
- # # Save gg_metaphlan as plotly html
-# htmlwidgets::saveWidget(plotly::ggplotly(metaphlan_df2 %>%
-#   left_join(metaphlan_df_sumry %>% select(sampleID, diversity_group)) %>% 
-#   ungroup() %>% 
-#   mutate(Genus = paste(Genus, Species, sep = "-"),
-#          Genus = factor(Genus, levels = unique(Genus))) %>% 
-#   group_by(sampleID) %>% 
-#   arrange(Genus) %>% 
-#   ggplot(aes(x=reorder(sampleID, Shannon),y=pctseqs)) +
-#   geom_bar(stat="identity",aes(fill=Genus), width = 0.9) +
-#   scale_fill_continuous(type = "viridis") +
-#   theme_bw() +
-#   theme(legend.position = "none",
-#         axis.text.x=eb(),
-#         axis.ticks.x=eb(),
-#         strip.text.x= et(angle=0,size=14),
-#         strip.background = eb(),
-#         axis.title.y = et(color = "black", size = 14),
-#         axis.text.y = et(color = "black", size = 12),
-#         panel.spacing = unit(0.5, "lines"),
-#         plot.margin = margin(t = 5,
-#                              r = 5, 
-#                              b = 0, 
-#                              l = 5)) +
-#   facet_grid(. ~diversity_group, scales = "free", space = "free")+
-#   scale_y_continuous(expand = expansion(mult = c(0.005,0.005)),
-#                      labels = scales::percent_format(accuracy = 1)) +
-#   ylab("MetaPhlAn4 Relative Abundance") +
-#   xlab("")), "./Results/Metaphlan_Species.html")
-
 
 # Stats
 gg_bile_gene_stats <-
@@ -3502,6 +3497,29 @@ rownames(diversity_cm_names) <- c("Predicted\nLow", "Predicted\nMedium", "Predic
 diversity_confusion_df <- diversity_cm_names %>% 
   t() 
 
+# multiclass 95% CI
+diversity_mc <- 
+biostatUtil::multiClassCM(
+  factor(diversity_metab_labs, levels = c("Low", "Medium", "High")),
+  factor(diversity_tot_predict, levels = c("Low", "Medium", "High")),
+  seed = 20,
+  num.boot = 1000,
+  conf.level = 0.95,
+  digits = 2,
+  method = "wilson"
+)
+
+diversity_mc_table <- diversity_mc$table %>% 
+  as.data.frame() %>% 
+  separate(., Low, into = c("X1", "X2", "X3", "X4"), sep = " ") %>% 
+  select(Average, "Low_Avg" = X1, "Low_Lower" = X2, "Low_Upper" = X4, Medium, High) %>% 
+  separate(., Medium, into = c("X1", "X2", "X3", "X4"), sep = " ") %>% 
+  select(Average, Low_Avg, Low_Lower, Low_Upper, "Med_Avg" = X1, "Med_Lower" = X2, "Med_Upper" = X4, High) %>%
+  separate(., High, into = c("X1", "X2", "X3", "X4"), sep = " ") %>% 
+  select(Average, Low_Avg, Low_Lower, Low_Upper, Med_Avg, Med_Lower, Med_Upper, "High_Avg" = X1, "High_Lower" = X2, "High_Upper" = X4) %>% 
+  mutate_all(funs(str_replace(., "\\(|\\)", ""))) %>% 
+  mutate_if(is.character,as.numeric)
+
 {
 pdf(file = "./Results/Figure_3A.pdf", height = 10, width = 10)
 plotIndiv(
@@ -3744,6 +3762,7 @@ ecoc_doms_metab_labs <-
   ecoc_doms_metab_mat %>% 
   rownames_to_column(var = "sampleID") %>% 
   left_join(peri_matrix_all %>% 
+              group_by(patientID) %>% 
              mutate(domination = case_when(enterococcus_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[2] #|
                                              # enterobacterales_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[1] 
                                            ~ "Expansion",
@@ -4359,8 +4378,8 @@ infx_metab_labs <-
   mutate(bact_infection_present = ifelse(grepl(x = bact_infection_present, pattern = "No"), "No Infection", "Infection")) %>% 
   pull(bact_infection_present)
 
-dim(infx_metab_mat) #107 93 (means 93 compounds and 108 LT patients/infections)
-length(infx_metab_labs) #107 (means 108 LT patients/infections)
+dim(infx_metab_mat) #107 93 (means 93 compounds and 107 LT patients/infections)
+length(infx_metab_labs) #107 (means 107 LT patients/infections)
 
 # Begin model training
 set.seed(1234)
@@ -4932,14 +4951,14 @@ dev.off()
 
 ```
 
-### Supplemental Figure 6A+B: Plot Loadings for Enterococcus Expansion
-```{r, supplemental-figure-a+b-splsda-ecoc-domination, fig.dim = c(14, 10), message=FALSE, warning=FALSE}
+### Supplemental Figure 7A+B: Plot Loadings for Enterococcus Expansion
+```{r, supplemental-figure-7a+b-splsda-ecoc-domination, fig.dim = c(14, 10), message=FALSE, warning=FALSE}
 # Take absolute value to make diversity group loadings plot narrower
 ecoc_doms_train_splsda_final$loadings$X <- abs(ecoc_doms_train_splsda_final$loadings$X)
 
-# Supplemental Figure 5AB
+# Supplemental Figure 7AB
 
-{pdf(file = "./Results/Supplemental_Figure_6AB.pdf",
+{pdf(file = "./Results/Supplemental_Figure_7AB.pdf",
          height = 8, 
          width = 11)
 
@@ -4998,14 +5017,14 @@ plotLoadings(
 
 ```
 
-### Supplemental Figure 6C+D: Plot Loadings for Enterobacterales Expansion
-```{r, supplemental-figure-6c+d-splsda-ebac-domination, fig.dim = c(14, 10), message=FALSE, warning=FALSE}
+### Supplemental Figure 7C+D: Plot Loadings for Enterobacterales Expansion
+```{r, supplemental-figure-7c+d-splsda-ebac-domination, fig.dim = c(14, 10), message=FALSE, warning=FALSE}
 # Take absolute value to make diversity group loadings plot narrower
 ebac_doms_train_splsda_final$loadings$X <- abs(ebac_doms_train_splsda_final$loadings$X)
 
-# Supplemental Figure 5CD
+# Supplemental Figure 7CD
 
-{pdf(file = "./Results/Supplemental_Figure_6CD.pdf",
+{pdf(file = "./Results/Supplemental_Figure_7CD.pdf",
          height = 8, 
          width = 11)
 
@@ -5064,18 +5083,18 @@ plotLoadings(
 
 ```
 
-### Supplemental Figure 7A+B: Plot Loadings for Any Bacterial Infection
-```{r, supplemental-figure-7a+b-splsda-any-infection, fig.dim = c(14, 10), message=FALSE, warning=FALSE}
+### Supplemental Figure 8A+B: Plot Loadings for Any Bacterial Infection
+```{r, supplemental-figure-8a+b-splsda-any-infection, fig.dim = c(14, 10), message=FALSE, warning=FALSE}
 # Take absolute value to make diversity group loadings plot narrower
 infx_train_splsda_final$loadings$X <- abs(infx_train_splsda_final$loadings$X)
 
-{pdf(file = "./Results/Supplemental_Figure_7.pdf",
+{pdf(file = "./Results/Supplemental_Figure_8.pdf",
          height = 8, 
          width = 11)
 
 par(mfrow = c(1,3))
 
-# Supplmental Figure 7A
+# Supplmental Figure 8A
 plotLoadings(
   infx_train_splsda_final,
   contrib = 'max',
@@ -5088,7 +5107,7 @@ plotLoadings(
   ndisplay = 50
 )
 
-# Supplmental Figure 7B
+# Supplmental Figure 8B
 plotLoadings(
   infx_train_splsda_final,
   contrib = 'max',
@@ -5104,7 +5123,7 @@ invisible(dev.off())}
 
 par(mfrow = c(1,3))
 
-# Supplmental Figure 7A
+# Supplmental Figure 8A
 plotLoadings(
   infx_train_splsda_final,
   contrib = 'max',
@@ -5117,7 +5136,7 @@ plotLoadings(
   ndisplay = 50
 )
 
-# Supplmental Figure 7B
+# Supplmental Figure 8B
 plotLoadings(
   infx_train_splsda_final,
   contrib = 'max',
@@ -5132,8 +5151,8 @@ plotLoadings(
 ```
 
 ## Tables
-### Supplemental Figure 5: Flow Diagram
-```{r, supplemental-figure-5-flow-diagram, warning=FALSE, message=FALSE, fig.dim = c(12, 8)}
+### Supplemental Figure 5A: Flow Diagram
+```{r, supplemental-figure-5a-flow-diagram, warning=FALSE, message=FALSE, fig.dim = c(12, 8)}
 flow_chart <- 
   flow_exclusions(
   incl_counts = c(158, 130, 107, 25),
@@ -5148,7 +5167,7 @@ flow_chart
 flow_chart %>% 
   export_svg() %>% 
   charToRaw() %>% 
-  rsvg_pdf("./Results/Supplemental_Figure_5.pdf")
+  rsvg_pdf("./Results/Supplemental_Figure_5A.pdf")
 ```
 
 ### Demographics
@@ -5204,6 +5223,45 @@ tab1_2_padjust3 <- tab1_2_padjust1 %>%
 
 # Read in csv to then append adjusted pvalues
 write.csv(tab1_2_padjust3,"./Results/Demo_Table_1_padjust.csv", row.names = FALSE)
+
+#### Stratify by diversity ####
+demo_div <- demo %>% left_join(metaphlan_df_sumry %>% mutate(patientID = str_extract(string = sampleID, pattern = "lt-[0-9]+")) %>% distinct(patientID, diversity_group) %>% drop_na(patientID) %>% droplevels())
+
+div_tab1_1 <- CreateTableOne(
+  vars = demo_vars,
+  testNonNormal = "kruskal.test",
+  includeNA = TRUE,
+  factorVars = demo_cats,
+  strata = "diversity_group",
+  data = demo_div
+)
+
+summary(div_tab1_1) # Age is potentially skewed, need to state that it is skewed and re-run `CreateTableOne`
+tableone_skewed <- c("age", "meld_transplant")
+
+div_tab1_2 <- print(div_tab1_1, nonnormal = tableone_skewed, formatOptions = list(big.mark = ","))
+
+write.csv(div_tab1_2, "./Results/Demo_Table_1_Diversity.csv", row.names = TRUE) # Saving then reading in the same data allows for an easy way to adjust p-values, since it loads the object as a dataframe
+
+# Need to adjust pvalues and arrange properly....hence the multiple dataframes below
+div_tab1_2_padjust1 <- read.csv("./Results/Demo_Table_1_Diversity.csv") %>% 
+  dplyr::rename(" " = X, "Low Diversity" = `Low.Diversity`, "Medium Diversity" = `Medium.Diversity`, "High Diversity" = `High.Diversity`)
+
+div_tab1_2_padjust2 <- div_tab1_2_padjust1 %>% 
+  mutate(` ` = factor(` `, levels = div_tab1_2_padjust1$` `))
+
+div_tab1_2_padjust3 <- div_tab1_2_padjust1 %>%
+    mutate(test = ifelse(!is.na(p) & test == "", "chi.sq", test)) %>%
+    group_by(test) %>%
+    rstatix::adjust_pvalue(p.col = "p", method = "BH") %>% 
+    ungroup() %>% 
+    mutate(` ` = factor(` `, div_tab1_2_padjust2$` `)) %>% 
+    arrange(` `) %>% 
+    mutate(p = ifelse(is.na(p), "", p),
+           p.adj = ifelse(is.na(p.adj), "", p.adj))
+
+# Read in csv to then append adjusted pvalues
+write.csv(div_tab1_2_padjust3,"./Results/Demo_Table_1_Diversity_padjust.csv", row.names = FALSE)
 ```
 
 ### Culture: Supplemental Table 3
@@ -5392,8 +5450,8 @@ abx_vars <- c("Basiliximab", "Mycophenolate", "Steroid", "Systemic Vancomycin", 
 
 abx2 <- abx %>% 
   filter(grepl(pattern = "basilix|tacro|steroid|mycophenolate|lactulose", medication_name, ignore.case = T)|
-           grepl(pattern = "GLUCOCORTICOIDS|steroid", med_pharm_class, ignore.case = T)|
-           grepl(pattern = "steroid", med_pharm_sub_class, ignore.case = T)|
+           grepl(pattern = "GLUCOCORTICOIDS|steroid", pharm_class, ignore.case = T)|
+           grepl(pattern = "steroid", pharm_sub_class, ignore.case = T)|
            grepl("given", mar_action, ignore.case = T)) %>%
   mutate(Immunosuppressants = case_when(grepl("basilix", medication_name, ignore.case = T) ~ "Basiliximab",
                               grepl("tacro", medication_name, ignore.case = T) ~ "Tacrolimus",
@@ -5417,14 +5475,15 @@ abx2 <- abx %>%
                               grepl("micafungin", medication_name, ignore.case = T) ~ "Micafungin",
                               grepl("cipro", medication_name, ignore.case = T) & !grepl("drop", dose_units, ignore.case = T) ~ "Ciprofloxacin"),
          action = case_when(!is.na(Immunosuppressants) & between(days_transplant, 0, 30)|!is.na(Immunosuppressants) & ordering_mode == "Outpatient" ~ "keep",
-                            !is.na(Antibiotics) & between(days_transplant, -7, 1) ~ "keep",
-                            TRUE ~ "remove")) %>% 
+                            !is.na(Antibiotics) & between(days_transplant, -14, 1) ~ "keep",
+         TRUE ~ "remove")
+) %>% 
   group_by(patientID, Immunosuppressants, Antibiotics) %>% 
   arrange(days_transplant) %>% 
-  filter(action == "keep") %>% 
+  filter(action == "keep") %>%
   dplyr::slice(1) %>% 
   select(patientID, Immunosuppressants, Antibiotics) %>% 
-  left_join(peri_matrix_all %>% select(patientID, any_infection)) %>% 
+  left_join(peri_matrix_all %>% select(patientID, any_infection)) %>%
   pivot_longer(!c(patientID, any_infection), names_to = "variable", values_to = "value") %>% 
   drop_na(value) %>% 
   mutate(variable = 1) %>% 
@@ -5465,10 +5524,835 @@ abx_tab1_2_padjust3 <- abx_tab1_2_padjust1 %>%
 
 # Read in csv to then append adjusted pvalues
 write.csv(abx_tab1_2_padjust3, "./Results/ABX_Table_1_padjust.csv", row.names = FALSE)
+
+#### Stratify by diversity ####
+abx2_div <- abx2 %>% left_join(metaphlan_df_sumry %>% mutate(patientID = str_extract(string = sampleID, pattern = "lt-[0-9]+")) %>% distinct(patientID, diversity_group) %>% drop_na(patientID) %>% droplevels())
+
+abx_div_tab1_1 <- CreateTableOne(
+  vars = abx_vars,
+  testNonNormal = "kruskal.test",
+  includeNA = TRUE,
+  factorVars = abx_vars,
+  strata = "diversity_group",
+  data = abx2_div
+)
+
+summary(abx_div_tab1_1) 
+
+abx_div_tab1_2 <- print(abx_div_tab1_1, nonnormal = tableone_skewed, formatOptions = list(big.mark = ","))
+
+write.csv(abx_div_tab1_2, "./Results/ABX_Table_1_Diversity.csv", row.names = TRUE) # Saving then reading in the same data allows for an easy way to adjust p-values, since it loads the object as a dataframe
+
+# Need to adjust pvalues and arrange properly....hence the multiple dataframes below
+abx_div_tab1_2_padjust1 <- read.csv("./Results/ABX_Table_1_Diversity.csv") %>% 
+  dplyr::rename(" " = X, "Low Diversity" = `Low.Diversity`, "Medium Diversity" = `Medium.Diversity`, "High Diversity" = `High.Diversity`)
+
+abx_div_tab1_2_padjust2 <- abx_div_tab1_2_padjust1 %>% 
+  mutate(` ` = factor(` `, levels = abx_div_tab1_2_padjust1$` `))
+
+abx_div_tab1_2_padjust3 <- abx_div_tab1_2_padjust1 %>%
+    mutate(test = ifelse(!is.na(p) & is.na(test), "chi.sq", test)) %>%
+    group_by(test) %>%
+    rstatix::adjust_pvalue(p.col = "p", method = "BH") %>% 
+    ungroup() %>% 
+    mutate(` ` = factor(` `, abx_div_tab1_2_padjust2$` `)) %>% 
+    arrange(` `) %>% 
+    mutate(p = ifelse(is.na(p), "", p),
+           p.adj = ifelse(is.na(p.adj), "", p.adj))
+
+# Read in csv to then append adjusted pvalues
+write.csv(abx_div_tab1_2_padjust3,"./Results/ABX_Table_1_Diversity_padjust.csv", row.names = FALSE)
+```
+
+### CARD Resistance Genes: Diversity Groups
+```{r, card-resistance, warning=FALSE, message=FALSE}
+div_card_tot <- card2 %>% left_join(card_dict)
+
+# Put in order of increasing diversity
+# Use qual metabolomic data order
+card_heatmap_column_order <- heatmap_data %>% 
+  ungroup() %>% 
+  filter(grepl(x = patientID, pattern = "^lt")) %>% 
+  group_by(patientID) %>% 
+  dplyr::slice(1) %>% 
+  ungroup() %>% 
+  left_join(alpha_shannon) %>% 
+  group_by(db) %>% 
+  arrange(db, Shannon) %>%  
+  ungroup() %>% 
+  distinct(sampleID) %>% 
+  pull(sampleID)
+
+# AMRGeneFamily level
+div_card_family_tot_0 <-
+  div_card_tot %>%
+  filter(sampleID %in% card_heatmap_column_order) %>% 
+  filter(grepl(DrugClass,  pattern = "glycopeptide|oxazolidinone")#,
+         # !grepl(ResistanceMechanism, pattern = "target")
+         ) %>%
+  group_by(sampleID, AMRGeneFamily) %>%
+  mutate(rpkm_mean = mean(rpkm)) %>%
+  dplyr::slice_max(rpkm_mean, n = 1, with_ties = F) %>%
+  ungroup() %>%
+  pivot_wider(id_cols = c(sampleID, rpkm_mean), names_from = "AMRGeneFamily", values_from = "rpkm", values_fill = 0) %>%
+  mutate_if(is.numeric, ~replace(., is.na(.), 0)) %>%
+  select(where(~ any(. != 0))) %>%
+  pivot_longer(-c(sampleID, rpkm_mean), names_to = "AMRGeneFamily", values_to = "rpkm") %>%
+  group_by(sampleID, AMRGeneFamily) %>%
+  slice_max(rpkm, n = 1, with_ties = F) %>%
+  ungroup() %>%
+  left_join(metaphlan_df_sumry %>% select(sampleID, diversity_group)) %>%
+  drop_na(diversity_group, AMRGeneFamily) %>%
+  group_by(AMRGeneFamily) %>%
+  filter(any(rpkm != 0)) # %>% ungroup() %>% distinct(sampleID)
+  # group_by(AMRGeneFamily, diversity_group) %>% 
+  # filter(n_distinct(rpkm) > 1) # Only keep samples with more than 2 unique values (helps remove the instance where all observations are 0 except 1)
+
+# Perform stats to find any significant differences
+div_card_family_tot_0_stats <-
+  div_card_family_tot_0 %>%
+  ungroup() %>% 
+  drop_na() %>% 
+  mutate(diversity_group = factor(diversity_group, levels = c("Low Diversity", "Medium Diversity", "High Diversity"))) %>%
+  group_by(AMRGeneFamily) %>%
+  rstatix::kruskal_test(rpkm~diversity_group) %>%
+  rstatix::adjust_pvalue(method = "BH") #%>%
+  # filter(p <= 0.05)
+  # filter(p.adj <= 0.05)
+
+div_card_family_tot_0_mat <-
+  card_heatmap_column_order %>% 
+  as.data.frame() %>% 
+  dplyr::rename('sampleID' = ".") %>% #ungroup() %>% distinct(sampleID)
+  left_join(div_card_tot) %>%
+  filter(grepl(DrugClass,  pattern = "glycopeptide|oxazolidinone") | sampleID %in% card_heatmap_column_order
+         ) %>% 
+  group_by(sampleID, AMRGeneFamily) %>%
+  mutate(rpkm_mean = mean(rpkm)) %>%
+  dplyr::slice_max(rpkm_mean, n = 1, with_ties = F) %>%
+  ungroup() %>%
+  mutate(rpkm = case_when(rpkm == 0 ~ "0",
+                          between(rpkm,  0, 10) ~ "0 - 10",
+                          between(rpkm, 10, 50) ~ "10 - 50",
+                          between(rpkm, 50, 100) ~ "50 - 100",
+                          TRUE ~ "100+"
+         )) %>%
+  left_join(metaphlan_df_sumry %>% select(sampleID, diversity_group)) %>% 
+  pivot_wider(id_cols = c(sampleID, diversity_group), names_from = "AMRGeneFamily", values_from = "rpkm") %>%
+  # mutate_if(is.numeric, ~replace(., is.na(.), 0)) %>%
+  mutate_if(is.character, ~replace(., is.na(.), "0")) %>%
+  # select(where(~ any(. != "0"))) %>%
+  pivot_longer(!c(sampleID, diversity_group), names_to = "AMRGeneFamily", values_to = "rpkm") %>%
+  group_by(sampleID, AMRGeneFamily) %>%
+  dplyr::slice_max(diversity_group, n = 1, with_ties = F) %>%
+  ungroup() %>%
+  right_join(div_card_family_tot_0_stats %>% select(AMRGeneFamily)) %>%
+  pivot_wider(id_cols = sampleID, names_from = "AMRGeneFamily", values_from = "rpkm") %>%
+  column_to_rownames(var = "sampleID")
+
+
+# Create labels
+div_card_family_heatmap_labels <-
+  div_card_family_tot_0_mat %>%
+  rownames_to_column(var = "sampleID") %>%
+  left_join(metaphlan_df_sumry %>% select(sampleID, diversity_group)) %>% 
+  group_by(sampleID) %>%
+  dplyr::slice_max(diversity_group, n = 1, with_ties = F) %>%
+  right_join(div_card_family_tot_0_mat %>% rownames_to_column(var = "sampleID")) %>%
+  select(diversity_group) %>%
+  mutate(diversity_group = factor(diversity_group, levels = c("Low Diversity", "Medium Diversity", "High Diversity"))) %>%
+  pull(diversity_group)
+
+# Create groupings of CARD classes
+div_card_family_heatmap_groups <-
+  div_card_family_tot_0_mat %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "AMRGeneFamily") %>%
+  left_join(div_card_family_tot_0_stats %>% select(AMRGeneFamily, p.adj)) %>%
+  arrange(p.adj) %>%
+  select(-p.adj) %>%
+  left_join(card_dict %>% select(AMRGeneFamily, DrugClass)) %>%
+  select(AMRGeneFamily, DrugClass) %>%
+  mutate(DrugClass2 = case_when(grepl(DrugClass, pattern = "carbapenem|penam") ~ "Carbapenem",
+                                DrugClass == "glycopeptide antibiotic" ~ "Vancomycin",
+                                grepl(DrugClass, pattern = "oxazolidinone antibiotic") ~ "Linezolid",
+                                grepl(DrugClass, pattern = "fluoroquinolone") ~ "Fluoroquinolone",
+                                TRUE ~ "Multi-Drug"
+                                )) %>%
+  group_by(AMRGeneFamily) %>%
+  dplyr::slice(1) %>%
+  left_join(div_card_family_tot_0_stats) %>%
+  arrange(p.adj)
+
+# Create row annotation of CARD classes
+div_card_family_heatmap_signif <-
+  div_card_family_tot_0_mat %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "AMRGeneFamily") %>%
+  left_join(div_card_family_tot_0_stats) %>%
+  arrange(p.adj) %>% 
+  mutate(p.adj = case_when(p.adj > 0.05 ~ "NS",
+                           p.adj <= 0.05 ~ "p < 0.05",
+                           p.adj <= 0.01 ~ "p < 0.01",
+                           p.adj <= 0.001 ~ "p < 0.0001"),
+         p.adj = as.factor(p.adj),
+         col = case_when(p.adj == "NS" ~ "gray80",
+                         p.adj == "p < 0.05" ~ "#98e2fa",
+                         p.adj == "p < 0.01" ~ "#44cffc",
+                         p.adj == "p < 0.0001" ~ "#03befc")) %>%
+  select(AMRGeneFamily, Significance = p.adj) %>%
+  inner_join(card_dict %>%
+              select(AMRGeneFamily) %>%
+              group_by(AMRGeneFamily) %>%
+              dplyr::slice(1)) %>%
+  column_to_rownames(var = "AMRGeneFamily")
+
+pcol <- as.vector(list(c("NS" = "gray80",
+                         "p < 0.05" = "#98e2fa",
+                         "p < 0.01" = "#44cffc",
+                         "p < 0.0001" = "#03befc")))[[1]]
+
+
+gg_div_card_family_heatmap <-
+div_card_family_tot_0_mat %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "AMRGeneFamily") %>%
+  left_join(div_card_family_tot_0_stats %>% select(AMRGeneFamily, p.adj)) %>%
+  arrange(p.adj) %>%
+  select(-p.adj) %>%
+  column_to_rownames(var = "AMRGeneFamily") %>% #nrow()
+  as.matrix() %>% 
+  Heatmap(
+    name = "RPKM",
+    col = c("0" = "#f0f4f5",
+            "0 - 10" = "#edb4de",
+            "10 - 50" = "#db8cc6",
+            "50 - 100" = "#c96bb0",
+            "100+" = "#9c3380"),
+    rect_gp = gpar(col = "black", lwd = 0.2),
+    column_names_gp = grid::gpar(fontsize = 8),
+    column_gap = unit(6, "mm"),
+    column_split = div_card_family_heatmap_labels,
+    column_order = card_heatmap_column_order,
+    column_title_gp = gpar(fontsize = 14),
+    column_title_rot = 0,
+    cluster_columns = FALSE,
+    show_column_names = FALSE,
+    show_column_dend = FALSE,
+    row_names_gp = gpar(fontsize = 6),
+    row_gap = unit(3.5, "mm"),
+    row_names_side = c("left"),
+    row_order = rownames(div_card_family_heatmap_signif),
+    row_split = div_card_family_heatmap_groups$DrugClass2,
+    row_title_rot = 0,
+    cluster_rows = FALSE,
+    show_row_dend = FALSE,
+    right_annotation = rowAnnotation(df = div_card_family_heatmap_signif,
+                                     show_annotation_name = F,
+                                     col = list(Significance = pcol)
+                                     )
+    # row_dend_width = unit(4, "in"),
+    # heatmap_width =  unit(12, "in")
+  )
+gg_div_card_family_heatmap
+
+pdf(file = "./Results/Diversity_CARD.pdf", height = 4, width = 12)
+gg_div_card_family_heatmap
+dev.off()
+```
+
+### CARD Resistance Genes: Enterococcus Expansion
+```{r, ecoc-expan-card-resistance, warning=FALSE, message=FALSE}
+ecoc_card_tot <- card2 %>% left_join(card_dict)
+
+# Put in order of increasing enterococcus sp
+# Use qual metabolomic data order
+ecoc_card_heatmap_column_order <- peri_matrix_all %>% 
+  ungroup() %>%
+  arrange(enterococcus_rel_abundance) %>% 
+  distinct(sampleID) %>%
+  pull(sampleID)
+
+# AMRGeneFamily level
+ecoc_card_family_tot_0 <-
+  ecoc_card_tot %>%
+  filter(sampleID %in% ecoc_card_heatmap_column_order,
+         grepl(DrugClass,  pattern = "glycopeptide")) %>%
+  group_by(sampleID, AMRGeneFamily) %>%
+  mutate(rpkm_mean = mean(rpkm)) %>%
+  dplyr::slice_max(rpkm_mean, n = 1, with_ties = F) %>%
+  ungroup() %>%
+  pivot_wider(id_cols = c(sampleID, rpkm_mean), names_from = "AMRGeneFamily", values_from = "rpkm", values_fill = 0) %>%
+  mutate_if(is.numeric, ~replace(., is.na(.), 0)) %>%
+  select(where(~ any(. != 0))) %>%
+  pivot_longer(-c(sampleID, rpkm_mean), names_to = "AMRGeneFamily", values_to = "rpkm") %>%
+  group_by(sampleID, AMRGeneFamily) %>%
+  slice_max(rpkm, n = 1, with_ties = F) %>%
+  ungroup() %>%
+  right_join(peri_matrix_all %>% 
+             mutate(domination = case_when(enterococcus_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[2] #|
+                                             # enterobacterales_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[1]
+                                           ~ "Expansion",
+                                          TRUE ~ "No Expansion")) %>% 
+               select(sampleID, domination)) %>%
+  drop_na(domination, AMRGeneFamily) %>%
+  group_by(AMRGeneFamily) %>%
+  filter(any(rpkm != 0)) # %>% ungroup() %>% distinct(sampleID)
+  # group_by(AMRGeneFamily, domination) %>% 
+  # filter(n_distinct(rpkm) > 1) # Only keep samples with more than 2 unique values (helps remove the instance where all observations are 0 except 1)
+
+# Perform stats to find any significant differences
+ecoc_card_family_tot_0_stats <-
+  ecoc_card_family_tot_0 %>%
+  ungroup() %>% 
+  drop_na() %>% 
+  mutate(domination = factor(domination, levels = c("No Expansion", "Expansion"))) %>%
+  group_by(AMRGeneFamily) %>%
+  rstatix::wilcox_test(rpkm~domination) %>%
+  rstatix::adjust_pvalue(method = "BH") #%>%
+  # filter(p <= 0.05)
+  # filter(p.adj <= 0.05)
+
+ecoc_card_family_tot_0_mat <-
+  ecoc_card_heatmap_column_order %>% 
+  as.data.frame() %>% 
+  dplyr::rename('sampleID' = ".") %>% #ungroup() %>% distinct(sampleID)
+  left_join(ecoc_card_tot) %>%
+  filter(grepl(DrugClass,  pattern = "glycopeptide|oxazolidinone") | sampleID %in% ecoc_card_heatmap_column_order
+         ) %>% 
+  group_by(sampleID, AMRGeneFamily) %>%
+  mutate(rpkm_mean = mean(rpkm)) %>%
+  dplyr::slice_max(rpkm_mean, n = 1, with_ties = F) %>%
+  ungroup() %>%
+  mutate(rpkm = case_when(rpkm == 0 ~ "0",
+                          between(rpkm,  0, 10) ~ "0 - 10",
+                          between(rpkm, 10, 50) ~ "10 - 50",
+                          between(rpkm, 50, 100) ~ "50 - 100",
+                          TRUE ~ "100+"
+         )) %>%
+  left_join(peri_matrix_all %>% 
+             mutate(domination = case_when(enterococcus_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[2] #|
+                                             # enterobacterales_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[1]
+                                           ~ "Expansion",
+                                          TRUE ~ "No Expansion")) %>% 
+               select(sampleID, domination)) %>% 
+  pivot_wider(id_cols = c(sampleID, domination), names_from = "AMRGeneFamily", values_from = "rpkm") %>%
+  # mutate_if(is.numeric, ~replace(., is.na(.), 0)) %>%
+  mutate_if(is.character, ~replace(., is.na(.), "0")) %>%
+  # select(where(~ any(. != "0"))) %>%
+  pivot_longer(!c(sampleID, domination), names_to = "AMRGeneFamily", values_to = "rpkm") %>%
+  group_by(sampleID, AMRGeneFamily) %>%
+  dplyr::slice_max(domination, n = 1, with_ties = F) %>%
+  ungroup() %>%
+  right_join(ecoc_card_family_tot_0_stats %>% select(AMRGeneFamily)) %>%
+  pivot_wider(id_cols = sampleID, names_from = "AMRGeneFamily", values_from = "rpkm") %>%
+  column_to_rownames(var = "sampleID")
+
+
+# Create labels
+ecoc_card_family_heatmap_labels <-
+  ecoc_card_family_tot_0_mat %>%
+  rownames_to_column(var = "sampleID") %>%
+  left_join(peri_matrix_all %>% 
+             mutate(domination = case_when(enterococcus_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[2] #|
+                                             # enterobacterales_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[1]
+                                           ~ "Expansion",
+                                          TRUE ~ "No Expansion")) %>% 
+               select(sampleID, domination)) %>% 
+  group_by(sampleID) %>%
+  dplyr::slice_max(domination, n = 1, with_ties = F) %>%
+  right_join(ecoc_card_family_tot_0_mat %>% rownames_to_column(var = "sampleID")) %>%
+  select(domination) %>%
+  mutate(domination = factor(domination, levels = c("No Expansion", "Expansion"))) %>%
+  pull(domination)
+
+# Create groupings of CARD classes
+ecoc_card_family_heatmap_groups <-
+  ecoc_card_family_tot_0_mat %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "AMRGeneFamily") %>%
+  left_join(ecoc_card_family_tot_0_stats %>% select(AMRGeneFamily, p.adj)) %>%
+  arrange(p.adj) %>%
+  select(-p.adj) %>%
+  left_join(card_dict %>% select(AMRGeneFamily, DrugClass)) %>%
+  select(AMRGeneFamily, DrugClass) %>%
+  mutate(DrugClass2 = case_when(grepl(DrugClass, pattern = "carbapenem|penam") ~ "Carbapenem",
+                                DrugClass == "glycopeptide antibiotic" ~ "Vancomycin",
+                                grepl(DrugClass, pattern = "oxazolidinone antibiotic") ~ "Linezolid",
+                                grepl(DrugClass, pattern = "fluoroquinolone") ~ "Fluoroquinolone",
+                                TRUE ~ "Multi-Drug"
+                                )) %>%
+  group_by(AMRGeneFamily) %>%
+  dplyr::slice(1) %>%
+  left_join(ecoc_card_family_tot_0_stats) %>%
+  arrange(p.adj)
+
+# Create row annotation of CARD classes
+ecoc_card_family_heatmap_signif <-
+  ecoc_card_family_tot_0_mat %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "AMRGeneFamily") %>%
+  left_join(ecoc_card_family_tot_0_stats) %>%
+  arrange(p.adj) %>% 
+  mutate(p.adj = case_when(p.adj > 0.05 ~ "NS",
+                           p.adj <= 0.05 ~ "p < 0.05",
+                           p.adj <= 0.01 ~ "p < 0.01",
+                           p.adj <= 0.001 ~ "p < 0.0001"),
+         p.adj = as.factor(p.adj),
+         col = case_when(p.adj == "NS" ~ "gray80",
+                         p.adj == "p < 0.05" ~ "#98e2fa",
+                         p.adj == "p < 0.01" ~ "#44cffc",
+                         p.adj == "p < 0.0001" ~ "#03befc")) %>%
+  select(AMRGeneFamily, Significance = p.adj) %>%
+  inner_join(card_dict %>%
+              select(AMRGeneFamily) %>%
+              group_by(AMRGeneFamily) %>%
+              dplyr::slice(1)) %>%
+  column_to_rownames(var = "AMRGeneFamily")
+
+gg_ecoc_card_family_heatmap <-
+ecoc_card_family_tot_0_mat %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "AMRGeneFamily") %>%
+  left_join(ecoc_card_family_tot_0_stats %>% select(AMRGeneFamily, p.adj)) %>%
+  arrange(p.adj) %>%
+  select(-p.adj) %>%
+  column_to_rownames(var = "AMRGeneFamily") %>% #nrow()
+  as.matrix() %>% 
+  Heatmap(
+    name = "RPKM",
+    col = c("0" = "#f0f4f5",
+            "0 - 10" = "#edb4de",
+            "10 - 50" = "#db8cc6",
+            "50 - 100" = "#c96bb0",
+            "100+" = "#9c3380"),
+    rect_gp = gpar(col = "black", lwd = 0.2),
+    column_names_gp = grid::gpar(fontsize = 8),
+    column_gap = unit(6, "mm"),
+    column_split = ecoc_card_family_heatmap_labels,
+    column_order = ecoc_card_heatmap_column_order,
+    column_title_gp = gpar(fontsize = 14),
+    column_title_rot = 0,
+    cluster_columns = FALSE,
+    show_column_names = FALSE,
+    show_column_dend = FALSE,
+    row_names_gp = gpar(fontsize = 6),
+    row_gap = unit(3.5, "mm"),
+    row_names_side = c("left"),
+    row_order = rownames(ecoc_card_family_heatmap_signif),
+    row_split = ecoc_card_family_heatmap_groups$DrugClass2,
+    row_title_rot = 0,
+    cluster_rows = FALSE,
+    show_row_dend = FALSE,
+    right_annotation = rowAnnotation(df = ecoc_card_family_heatmap_signif,
+                                     show_annotation_name = F,
+                                     col = list(Significance = pcol)
+                                     )
+    # row_dend_width = unit(4, "in"),
+    # heatmap_width =  unit(12, "in")
+  )
+gg_ecoc_card_family_heatmap
+
+pdf(file = "./Results/Ecoc_Expan_CARD.pdf", height = 4, width = 12)
+gg_ecoc_card_family_heatmap
+dev.off()
+```
+
+### CARD Resistance Genes: Enterobacterales Expansion
+```{r, ebac-card-resistance, warning=FALSE, message=FALSE}
+ebac_card_tot <- card2 %>% left_join(card_dict)
+
+# Put in order of increasing enterobacterales sp
+# Use qual metabolomic data order
+ebac_card_heatmap_column_order <- peri_matrix_all %>% 
+  ungroup() %>%
+  arrange(enterobacterales_rel_abundance) %>% 
+  distinct(sampleID) %>%
+  pull(sampleID)
+
+# AMRGeneFamily level
+ebac_card_family_tot_0 <-
+  ebac_card_tot %>%
+  filter(sampleID %in% ebac_card_heatmap_column_order,
+         grepl(DrugClass,  pattern = "carbapenem|fluoroquinolone"),
+         !grepl(DrugClass, pattern = "oxazolidinone")) %>% 
+  group_by(sampleID, AMRGeneFamily) %>%
+  mutate(rpkm_mean = mean(rpkm)) %>%
+  dplyr::slice_max(rpkm_mean, n = 1, with_ties = F) %>%
+  ungroup() %>%
+  pivot_wider(id_cols = c(sampleID, rpkm_mean), names_from = "AMRGeneFamily", values_from = "rpkm", values_fill = 0) %>%
+  mutate_if(is.numeric, ~replace(., is.na(.), 0)) %>%
+  select(where(~ any(. != 0))) %>%
+  pivot_longer(-c(sampleID, rpkm_mean), names_to = "AMRGeneFamily", values_to = "rpkm") %>%
+  group_by(sampleID, AMRGeneFamily) %>%
+  slice_max(rpkm, n = 1, with_ties = F) %>%
+  ungroup() %>%
+  right_join(peri_matrix_all %>% 
+             mutate(domination = case_when(enterobacterales_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[1]
+                                           ~ "Expansion",
+                                          TRUE ~ "No Expansion")) %>% 
+               select(sampleID, domination)) %>%
+  drop_na(domination, AMRGeneFamily) %>%
+  group_by(AMRGeneFamily) %>%
+  filter(any(rpkm != 0)) # %>% ungroup() %>% distinct(sampleID)
+  # group_by(AMRGeneFamily, domination) %>% 
+  # filter(n_distinct(rpkm) > 1) # Only keep samples with more than 2 unique values (helps remove the instance where all observations are 0 except 1)
+
+# Perform stats to find any significant differences
+ebac_card_family_tot_0_stats <-
+  ebac_card_family_tot_0 %>%
+  ungroup() %>% 
+  drop_na() %>% 
+  mutate(domination = factor(domination, levels = c("No Expansion", "Expansion"))) %>%
+  group_by(AMRGeneFamily) %>%
+  rstatix::wilcox_test(rpkm~domination) %>%
+  rstatix::adjust_pvalue(method = "BH") #%>%
+  # filter(p <= 0.05)
+  # filter(p.adj <= 0.05)
+
+ebac_card_family_tot_0_mat <-
+  ebac_card_heatmap_column_order %>% 
+  as.data.frame() %>% 
+  dplyr::rename('sampleID' = ".") %>% #ungroup() %>% distinct(sampleID)
+  left_join(ebac_card_tot) %>%
+  filter(grepl(DrugClass,  pattern = "glycopeptide") | sampleID %in% ebac_card_heatmap_column_order,
+         !grepl(DrugClass, pattern = "oxazolidinone")) %>% 
+  group_by(sampleID, AMRGeneFamily) %>%
+  mutate(rpkm_mean = mean(rpkm)) %>%
+  dplyr::slice_max(rpkm_mean, n = 1, with_ties = F) %>%
+  ungroup() %>%
+  mutate(rpkm = case_when(rpkm == 0 ~ "0",
+                          between(rpkm,  0, 10) ~ "0 - 10",
+                          between(rpkm, 10, 50) ~ "10 - 50",
+                          between(rpkm, 50, 100) ~ "50 - 100",
+                          TRUE ~ "100+"
+         )) %>%
+  left_join(peri_matrix_all %>% 
+             mutate(domination = case_when(enterobacterales_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[1]
+                                           ~ "Expansion",
+                                          TRUE ~ "No Expansion")) %>% 
+               select(sampleID, domination)) %>% 
+  pivot_wider(id_cols = c(sampleID, domination), names_from = "AMRGeneFamily", values_from = "rpkm") %>%
+  # mutate_if(is.numeric, ~replace(., is.na(.), 0)) %>%
+  mutate_if(is.character, ~replace(., is.na(.), "0")) %>%
+  # select(where(~ any(. != "0"))) %>%
+  pivot_longer(!c(sampleID, domination), names_to = "AMRGeneFamily", values_to = "rpkm") %>%
+  group_by(sampleID, AMRGeneFamily) %>%
+  dplyr::slice_max(domination, n = 1, with_ties = F) %>%
+  ungroup() %>%
+  right_join(ebac_card_family_tot_0_stats %>% select(AMRGeneFamily)) %>%
+  pivot_wider(id_cols = sampleID, names_from = "AMRGeneFamily", values_from = "rpkm") %>%
+  column_to_rownames(var = "sampleID")
+
+
+# Create labels
+ebac_card_family_heatmap_labels <-
+  ebac_card_family_tot_0_mat %>%
+  rownames_to_column(var = "sampleID") %>%
+  left_join(peri_matrix_all %>% 
+             mutate(domination = case_when(enterobacterales_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[1]
+                                           ~ "Expansion",
+                                          TRUE ~ "No Expansion")) %>% 
+               select(sampleID, domination)) %>% 
+  group_by(sampleID) %>%
+  dplyr::slice_max(domination, n = 1, with_ties = F) %>%
+  right_join(ebac_card_family_tot_0_mat %>% rownames_to_column(var = "sampleID")) %>%
+  select(domination) %>%
+  mutate(domination = factor(domination, levels = c("No Expansion", "Expansion"))) %>%
+  pull(domination)
+
+# Create groupings of CARD classes
+ebac_card_family_heatmap_groups <-
+  ebac_card_family_tot_0_mat %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "AMRGeneFamily") %>%
+  left_join(ebac_card_family_tot_0_stats %>% select(AMRGeneFamily, p.adj)) %>%
+  arrange(p.adj) %>%
+  select(-p.adj) %>%
+  left_join(card_dict %>% select(AMRGeneFamily, DrugClass)) %>%
+  select(AMRGeneFamily, DrugClass) %>%
+  mutate(DrugClass2 = case_when(grepl(DrugClass, pattern = "carbapenem|penam") ~ "Carbapenem",
+                                DrugClass == "glycopeptide antibiotic" ~ "Vancomycin",
+                                # grepl(DrugClass, pattern = "oxazolidinone") ~ "Linezolid",
+                                grepl(DrugClass, pattern = "fluoroquinolone") ~ "Fluoroquinolone",
+                                TRUE ~ "Multi-Drug"
+                                )) %>%
+  group_by(AMRGeneFamily) %>%
+  dplyr::slice(1) %>%
+  left_join(ebac_card_family_tot_0_stats) %>%
+  arrange(p.adj)
+
+# Create row annotation of CARD classes
+ebac_card_family_heatmap_signif <-
+  ebac_card_family_tot_0_mat %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "AMRGeneFamily") %>%
+  left_join(ebac_card_family_tot_0_stats) %>%
+  arrange(p.adj) %>% 
+  mutate(p.adj = case_when(p.adj > 0.05 ~ "NS",
+                           p.adj <= 0.05 ~ "p < 0.05",
+                           p.adj <= 0.01 ~ "p < 0.01",
+                           p.adj <= 0.001 ~ "p < 0.0001"),
+         p.adj = as.factor(p.adj),
+         col = case_when(p.adj == "NS" ~ "gray80",
+                         p.adj == "p < 0.05" ~ "#98e2fa",
+                         p.adj == "p < 0.01" ~ "#44cffc",
+                         p.adj == "p < 0.0001" ~ "#03befc")) %>%
+  select(AMRGeneFamily, Significance = p.adj) %>%
+  inner_join(card_dict %>%
+              select(AMRGeneFamily) %>%
+              group_by(AMRGeneFamily) %>%
+              dplyr::slice(1)) %>%
+  column_to_rownames(var = "AMRGeneFamily")
+
+gg_ebac_card_family_heatmap <-
+ebac_card_family_tot_0_mat %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "AMRGeneFamily") %>%
+  left_join(ebac_card_family_tot_0_stats %>% select(AMRGeneFamily, p.adj)) %>%
+  arrange(p.adj) %>%
+  select(-p.adj) %>%
+  column_to_rownames(var = "AMRGeneFamily") %>% #nrow()
+  as.matrix() %>% 
+  Heatmap(
+    name = "RPKM",
+    col = c("0" = "#f0f4f5",
+            "0 - 10" = "#edb4de",
+            "10 - 50" = "#db8cc6",
+            "50 - 100" = "#c96bb0",
+            "100+" = "#9c3380"),
+    rect_gp = gpar(col = "black", lwd = 0.2),
+    column_names_gp = grid::gpar(fontsize = 8),
+    column_gap = unit(6, "mm"),
+    column_split = ebac_card_family_heatmap_labels,
+    column_order = ebac_card_heatmap_column_order,
+    column_title_gp = gpar(fontsize = 14),
+    column_title_rot = 0,
+    cluster_columns = FALSE,
+    show_column_names = FALSE,
+    show_column_dend = FALSE,
+    row_names_gp = gpar(fontsize = 6),
+    row_gap = unit(3.5, "mm"),
+    row_names_side = c("left"),
+    row_order = rownames(ebac_card_family_heatmap_signif),
+    row_split = ebac_card_family_heatmap_groups$DrugClass2,
+    row_title_rot = 0,
+    cluster_rows = FALSE,
+    show_row_dend = FALSE,
+    right_annotation = rowAnnotation(df = ebac_card_family_heatmap_signif,
+                                     show_annotation_name = F,
+                                     col = list(Significance = pcol)
+                                     )
+    # row_dend_width = unit(4, "in"),
+    # heatmap_width =  unit(12, "in")
+  )
+gg_ebac_card_family_heatmap
+
+pdf(file = "./Results/Ebac_Expan_CARD.pdf", height = 6, width = 12)
+gg_ebac_card_family_heatmap
+dev.off()
+```
+
+### CARD Resistance Genes: Any Infection
+```{r, any-infx-card-resistance, warning=FALSE, message=FALSE, echo=FALSE, eval=FALSE}
+# Put in order of increasing enterococcus sp then enterobacterales sp
+# Use qual metabolomic data order
+any_infx_card_heatmap_column_order <- peri_matrix_all %>% 
+  ungroup() %>%
+  arrange(enterococcus_rel_abundance, enterobacterales_rel_abundance) %>% 
+  distinct(sampleID) %>%
+  pull(sampleID)
+
+# AMRGeneFamily level
+any_infx_card_family_tot_0 <-
+  card_tot %>%
+  filter(sampleID %in% any_infx_card_heatmap_column_order, # Order by 
+         grepl(DrugClass,  pattern = "glycopeptide|carbapenem|fluoroquinolone")) %>%
+  group_by(sampleID, AMRGeneFamily) %>%
+  mutate(rpkm_mean = mean(rpkm)) %>%
+  dplyr::slice_max(rpkm_mean, n = 1, with_ties = F) %>%
+  ungroup() %>%
+  pivot_wider(id_cols = c(sampleID, rpkm_mean), names_from = "AMRGeneFamily", values_from = "rpkm", values_fill = 0) %>%
+  mutate_if(is.numeric, ~replace(., is.na(.), 0)) %>%
+  select(where(~ any(. != 0))) %>%
+  pivot_longer(-c(sampleID, rpkm_mean), names_to = "AMRGeneFamily", values_to = "rpkm") %>%
+  group_by(sampleID, AMRGeneFamily) %>%
+  slice_max(rpkm, n = 1, with_ties = F) %>%
+  ungroup() %>%
+  right_join(peri_matrix_all %>% 
+             mutate(bact_infection_present = ifelse(bact_infection_present == "Yes", "Bacterial Infection", "No Bacterial Infection")) %>% 
+               select(sampleID, bact_infection_present)) %>%
+  drop_na(bact_infection_present, AMRGeneFamily) %>%
+  group_by(AMRGeneFamily) %>%
+  filter(any(rpkm != 0)) # %>% ungroup() %>% distinct(sampleID)
+  # group_by(AMRGeneFamily, bact_infection_present) %>% 
+  # filter(n_distinct(rpkm) > 1) # Only keep samples with more than 2 unique values (helps remove the instance where all observations are 0 except 1)
+
+# Perform stats to find any significant differences
+any_infx_card_family_tot_0_stats <-
+  any_infx_card_family_tot_0 %>%
+  ungroup() %>% 
+  drop_na() %>% 
+  mutate(bact_infection_present = factor(bact_infection_present, levels = c("No Bacterial Infection", "Bacterial Infection"))) %>%
+  group_by(AMRGeneFamily) %>%
+  rstatix::wilcox_test(rpkm~bact_infection_present) %>%
+  rstatix::adjust_pvalue(method = "BH") #%>%
+  # filter(p <= 0.05)
+  # filter(p.adj <= 0.05)
+
+any_infx_card_family_tot_0_mat <-
+  any_infx_card_heatmap_column_order %>%  # Still order by enterococcus relative abundance
+  as.data.frame() %>% 
+  dplyr::rename('sampleID' = ".") %>% #ungroup() %>% distinct(sampleID)
+  left_join(card_tot) %>%
+  filter(grepl(DrugClass,  pattern = "glycopeptide|carbapenem|fluoroquinolone") | sampleID %in% any_infx_card_heatmap_column_order) %>% 
+  group_by(sampleID, AMRGeneFamily) %>%
+  mutate(rpkm_mean = mean(rpkm)) %>%
+  dplyr::slice_max(rpkm_mean, n = 1, with_ties = F) %>%
+  ungroup() %>%
+  mutate(rpkm = case_when(rpkm == 0 ~ "0",
+                          between(rpkm,  0, 10) ~ "0 - 10",
+                          between(rpkm, 10, 50) ~ "10 - 50",
+                          between(rpkm, 50, 100) ~ "50 - 100",
+                          TRUE ~ "100+"
+         )) %>%
+  left_join(peri_matrix_all %>% 
+             mutate(bact_infection_present = ifelse(bact_infection_present == "Yes", "Bacterial Infection", "No Bacterial Infection")) %>% 
+               select(sampleID, bact_infection_present)) %>% 
+  pivot_wider(id_cols = c(sampleID, bact_infection_present), names_from = "AMRGeneFamily", values_from = "rpkm") %>%
+  # mutate_if(is.numeric, ~replace(., is.na(.), 0)) %>%
+  mutate_if(is.character, ~replace(., is.na(.), "0")) %>%
+  # select(where(~ any(. != "0"))) %>%
+  pivot_longer(!c(sampleID, bact_infection_present), names_to = "AMRGeneFamily", values_to = "rpkm") %>%
+  group_by(sampleID, AMRGeneFamily) %>%
+  dplyr::slice_max(bact_infection_present, n = 1, with_ties = F) %>%
+  ungroup() %>%
+  right_join(any_infx_card_family_tot_0_stats %>% select(AMRGeneFamily)) %>%
+  pivot_wider(id_cols = sampleID, names_from = "AMRGeneFamily", values_from = "rpkm") %>%
+  column_to_rownames(var = "sampleID")
+
+
+# Create labels
+any_infx_card_family_heatmap_labels <-
+  any_infx_card_family_tot_0_mat %>%
+  rownames_to_column(var = "sampleID") %>%
+  left_join(peri_matrix_all %>% 
+             mutate(bact_infection_present = ifelse(bact_infection_present == "Yes", "Bacterial Infection", "No Bacterial Infection")) %>% 
+               select(sampleID, bact_infection_present)) %>% 
+  group_by(sampleID) %>%
+  dplyr::slice_max(bact_infection_present, n = 1, with_ties = F) %>%
+  right_join(any_infx_card_family_tot_0_mat %>% rownames_to_column(var = "sampleID")) %>%
+  select(bact_infection_present) %>%
+  mutate(bact_infection_present = factor(bact_infection_present, levels = c("No Bacterial Infection", "Bacterial Infection"))) %>%
+  pull(bact_infection_present)
+
+# Create groupings of CARD classes
+any_infx_card_family_heatmap_groups <-
+  any_infx_card_family_tot_0_mat %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "AMRGeneFamily") %>%
+  left_join(any_infx_card_family_tot_0_stats %>% select(AMRGeneFamily, p.adj)) %>%
+  arrange(p.adj) %>%
+  select(-p.adj) %>%
+  left_join(card_dict %>% select(AMRGeneFamily, DrugClass)) %>%
+  select(AMRGeneFamily, DrugClass) %>%
+  mutate(DrugClass2 = case_when(grepl(DrugClass, pattern = "carbapenem|penam") ~ "Carbapenem",
+                                DrugClass == "glycopeptide antibiotic" ~ "Vancomycin",
+                                # grepl(DrugClass, pattern = "oxazolidinone") ~ "Linezolid",
+                                grepl(DrugClass, pattern = "fluoroquinolone") ~ "Fluoroquinolone",
+                                TRUE ~ "Multi-Drug"
+                                ),
+         DrugClass2 = factor(DrugClass2, levels = c("Vancomycin", "Carbapenem", "Fluoroquinolone", "Multi-Drug"))) %>%
+  group_by(AMRGeneFamily) %>%
+  dplyr::slice(1) %>%
+  left_join(any_infx_card_family_tot_0_stats) %>%
+  arrange(p.adj)
+
+# Create row annotation of CARD classes
+any_infx_card_family_heatmap_signif <-
+  any_infx_card_family_tot_0_mat %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "AMRGeneFamily") %>%
+  left_join(any_infx_card_family_tot_0_stats) %>%
+  arrange(p.adj) %>% 
+  mutate(p.adj = case_when(p.adj > 0.05 ~ "NS",
+                           p.adj <= 0.05 ~ "p < 0.05",
+                           p.adj <= 0.01 ~ "p < 0.01",
+                           p.adj <= 0.001 ~ "p < 0.0001"),
+         p.adj = as.factor(p.adj),
+         col = case_when(p.adj == "NS" ~ "gray80",
+                         p.adj == "p < 0.05" ~ "#98e2fa",
+                         p.adj == "p < 0.01" ~ "#44cffc",
+                         p.adj == "p < 0.0001" ~ "#03befc")) %>%
+  select(AMRGeneFamily, Significance = p.adj) %>%
+  inner_join(card_dict %>%
+              select(AMRGeneFamily) %>%
+              group_by(AMRGeneFamily) %>%
+              dplyr::slice(1)) %>%
+  column_to_rownames(var = "AMRGeneFamily")
+
+gg_any_infx_card_family_heatmap <-
+any_infx_card_family_tot_0_mat %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "AMRGeneFamily") %>%
+  left_join(any_infx_card_family_tot_0_stats %>% select(AMRGeneFamily, p.adj)) %>%
+  arrange(p.adj) %>%
+  select(-p.adj) %>%
+  column_to_rownames(var = "AMRGeneFamily") %>% #nrow()
+  as.matrix() %>% 
+  Heatmap(
+    name = "RPKM",
+    col = c("0" = "#f0f4f5",
+            "0 - 10" = "#edb4de",
+            "10 - 50" = "#db8cc6",
+            "50 - 100" = "#c96bb0",
+            "100+" = "#9c3380"),
+    rect_gp = gpar(col = "black", lwd = 0.2),
+    column_names_gp = grid::gpar(fontsize = 8),
+    column_gap = unit(6, "mm"),
+    column_split = any_infx_card_family_heatmap_labels,
+    column_order = any_infx_card_heatmap_column_order, # Keep in enterococcus relative abundance then enterobacterales order
+    column_title_gp = gpar(fontsize = 14),
+    column_title_rot = 0,
+    cluster_columns = FALSE,
+    show_column_names = FALSE,
+    show_column_dend = FALSE,
+    row_names_gp = gpar(fontsize = 6),
+    row_gap = unit(3.5, "mm"),
+    row_names_side = c("left"),
+    row_order = rownames(any_infx_card_family_heatmap_signif),
+    row_split = any_infx_card_family_heatmap_groups$DrugClass2,
+    row_title_rot = 0,
+    cluster_rows = FALSE,
+    show_row_dend = FALSE,
+    right_annotation = rowAnnotation(df = any_infx_card_family_heatmap_signif,
+                                     show_annotation_name = F,
+                                     col = list(Significance = pcol)
+                                     )
+    # row_dend_width = unit(4, "in"),
+    # heatmap_width =  unit(12, "in")
+  )
+gg_any_infx_card_family_heatmap
+
+pdf(file = "./Results/Any_Infx_CARD.pdf", height = 8, width = 12)
+gg_any_infx_card_family_heatmap
+dev.off()
 ```
 
 ### Supplemental Figure 1: Fecal Sample Collected from Transplant
-```{r, supplemental-figure-1-sample-relative-to-transplant,warning=FALSE, message=FALSE, fig.dim = c(12, 8)}
+```{r, supplemental-figure-1-sample-relative-to-transplant, warning=FALSE, message=FALSE}
 sample_days <- 
   metaphlan_df_sumry %>% 
   group_by(sampleID) %>% 
@@ -5567,6 +6451,1995 @@ metaphlan_df2 %>%
   filter(pctseqs > 0.9) %>%
   select(-y.text, -db) %>% 
   write.csv(., "./Results/90percent_taxon.csv", row.names = FALSE)
+```
+
+### Supplemental Figure 5B: Infections by Diversity Group
+```{r, supplemental-figure-5a-infections-by-diversity-group, warning=FALSE, message=FALSE}
+diversity_infx <- peri_criteria_all %>% 
+  left_join(metaphlan_df_sumry %>% 
+              mutate(patientID = str_extract(string = sampleID, pattern = "lt-[0-9]+")) %>% 
+              select(patientID, diversity_group)) %>% 
+  group_by(patientID, eday) %>%
+  arrange(-infx_stool) %>%
+  dplyr::slice(1) %>%
+  ungroup() %>% 
+  select(patientID, sampleID, diversity_group, bact_infection_present, infx_stool, organism1, micro1.factor) %>%
+  distinct() %>% 
+  mutate(organism1 = gsub(x = organism1, pattern = "\\s+", replacement = ""),
+         organism1 = str_to_lower(string = organism1),
+         organism1 = ifelse(grepl(x = organism1, pattern = "enterococcus|enterobacterales|klebsiella|escherichia|citrobacter|proteus|staphyl|clostrid|pseudo|steno|bacteroides|helico"), organism1, "Culture Negative")) %>% 
+  group_by(patientID, sampleID, infx_stool) %>%
+  mutate(`Enterococcus faecium` = grepl(x = organism1, pattern = "enterococcusfaecium", ignore.case = T),
+         `Enterococcus faecalis` = grepl(x = organism1, pattern = "enterococcusfaecalis", ignore.case = T),
+         `Enterococcus avium` = grepl(x = organism1, pattern = "enterococcusavium", ignore.case = T),
+         `Enterococcus gallinarum` = grepl(x = organism1, pattern = "enterococcusgallinarum", ignore.case = T),
+         `Klebsiella pneumoniae` = grepl(x = organism1, pattern = "klebsiellapneumoniae", ignore.case = T),
+         `Enterobacter cloaceae` = grepl(x = organism1, pattern = "enterobactercloaceae", ignore.case = T),
+         `Escherichia coli` = grepl(x = organism1, pattern = "escherichiacoli", ignore.case = T),
+         `Citrobacter freundii` = grepl(x = organism1, pattern = "citrobacterfreundii", ignore.case = T),
+         `Proteus mirabilis` = grepl(x = organism1, pattern = "proteusmirabilis", ignore.case = T),
+         `Staphylococcus aureus` = grepl(x = organism1, pattern = "staphylococcusaureus", ignore.case = T),
+         `Staphylococcus epidermis` = grepl(x = organism1, pattern = "staphylococcusepidermidis", ignore.case = T),
+         `Pseudomonas aeruginosa` = grepl(x = organism1, pattern = "pseudomonasaeruginosa", ignore.case = T),
+         `Stenotrophmonas maltophilia` = grepl(x = organism1, pattern = "stenotrophmonasmaltophilia", ignore.case = T),
+         `Helicobacter pylori` = grepl(x = organism1, pattern = "helicobacterpylori", ignore.case = T),
+         `Clostridium difficile` = grepl(x = organism1, pattern = "clostridiumdifficile|clostridioidesdifficile", ignore.case = T),
+         `Bacteroides sp.` = grepl(x = organism1, pattern = "bacteroides", ignore.case = T),
+         `Culture Negative` = grepl(x = organism1, pattern = "Culture Negative", ignore.case = T)) %>%  
+  pivot_longer(-c(patientID:micro1.factor), names_to = "organisms", values_to = "org_presence") %>%
+  mutate(organisms = ifelse(bact_infection_present == "No", "No Bacterial Infection", organisms),
+         org_presence = ifelse(org_presence == TRUE, 1, 0)) %>% 
+  group_by(sampleID, infx_stool, bact_infection_present, organisms) %>% 
+  dplyr::slice_max(org_presence) %>% 
+  ungroup() %>% 
+  filter(org_presence == 1) %>% 
+  group_by(patientID, sampleID, organisms, org_presence) %>% 
+  dplyr::slice(1) %>%
+  mutate(sampleID = ifelse(is.na(sampleID), patientID, sampleID)) %>% 
+  mutate(org_presence = ifelse(grepl(pattern = "No", x = bact_infection_present, ignore.case = T), 0, org_presence)) %>% 
+  ungroup() %>% 
+  mutate(organisms = ifelse(bact_infection_present == "Yes" & org_presence == 0, "Other", organisms)) %>% 
+  mutate(organisms = ifelse(grepl(x = organisms, pattern = "enterococcus|klebsiella|escherichia|proteus|citrobacter|culture", ignore.case = TRUE), organisms, "Other Bacterial Infection"),
+         organisms = ifelse(bact_infection_present == "No", "No Bacterial Infection", organisms),
+         diversity_group = as.character(diversity_group),
+         diversity_group = factor(diversity_group, levels = c("Low Diversity", "Medium Diversity", "High Diversity")),
+         org_presence = ifelse(grepl(pattern = "No", x = bact_infection_present, ignore.case = T), 0, 1))
+
+diversity_infx_stats <-
+  diversity_infx %>% 
+  ungroup() %>% 
+  group_by(diversity_group) %>%
+  summarise(n = nrow(.),
+            org_presence_1 = sum(org_presence == 1),
+            org_presence_0 = n - org_presence_1) %>% 
+  select(-n) %>% 
+  column_to_rownames(var = "diversity_group") %>% 
+  # t() %>% 
+  rstatix::pairwise_prop_test(p.adjust.method = "BH") %>% 
+  mutate(p = ifelse(p < 0.001, "p < 0.001", paste("p = ", round(p, 2))),
+         p.adj = ifelse(p.adj < 0.001, "p.adj < 0.001", paste("p.adj = ", round(p.adj, 2))))
+
+
+gg_diversity_infx <-
+diversity_infx %>% 
+  mutate(diversity_group = as.character(diversity_group),
+         diversity_group = ifelse(is.na(diversity_group), "No Stool Sample", diversity_group),
+         diversity_group = factor(diversity_group, levels = c("Low Diversity", "Medium Diversity", "High Diversity", "No Stool Sample")),
+         organisms = ifelse(grepl(organisms, pattern = "gallinarum"), "Other Bacterial Infection", organisms),
+         org_colors = case_when(grepl(x = organisms, pattern = "enterococcus faecium", ignore.case = T) ~ 1,
+                                grepl(x = organisms, pattern = "enterococcus faecalis", ignore.case = T) ~ 2,
+                                grepl(x = organisms, pattern = "enterococcus avium", ignore.case = T) ~ 3,
+                                # grepl(x = organisms, pattern = "enterococcus gallinarum", ignore.case = T) ~ 3,
+                                grepl(x = organisms, pattern = "klebsiella pneumoniae", ignore.case = T) ~ 4,
+                                grepl(x = organisms, pattern = "escherichia coli", ignore.case = T) ~ 5,
+                                grepl(x = organisms, pattern = "proteus mirabilis", ignore.case = T) ~ 6,
+                                grepl(x = organisms, pattern = "citrobacter freundii", ignore.case = T) ~ 7,
+                                grepl(x = organisms, pattern = "other bacterial infection|gallinarum", ignore.case = T) ~ 8,
+                                grepl(x = organisms, pattern = "culture negative", ignore.case = T) ~ 9,
+                                grepl(x = diversity_group, pattern = "no stool sample", ignore.case = T) ~ 10,
+                                TRUE ~ 0),
+         organisms = as.factor(organisms),
+         organisms = factor(organisms, levels = c("Enterococcus faecium",
+                                                  "Enterococcus faecalis",
+                                                  "Enterococcus avium",
+                                                  "Klebsiella pneumoniae",
+                                                  "Escherichia coli",
+                                                  "Proteus mirabilis",
+                                                  "Citrobacter freundii",
+                                                  "Other Bacterial Infection",
+                                                  "Culture Negative",
+                                                  "No Bacterial Infection",
+                                                  "No Stool Sample")),
+         org_colors = factor(org_colors, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "0"))) %>% 
+  filter(org_colors != "0") %>% 
+ggplot(aes(x = diversity_group, y = org_presence, fill = as.factor(org_colors))) +
+  geom_col(color = "black", size = 0.3) +
+  theme_bw() +
+  theme(
+    axis.text = et(size = 12, color = "black"),
+    axis.title.x = eb(),
+    axis.title.y = et(size = 14, color = "black"),
+    panel.grid = eb(),
+    panel.border = eb(),
+    axis.line = el(color = "black")
+  ) +
+  geom_table_npc(data = diversity_infx_stats %>% 
+                          select(` ` = group1, `  ` = group2, p.adj) %>%
+                          mutate(p.adj = gsub(pattern = "p.adj = ", replacement = "", p.adj)), 
+                 label = list(diversity_infx_stats %>% 
+                          select(` ` = group1, `  ` = group2, p.adj) %>%
+                          mutate(p.adj = gsub(pattern = "p.adj = ", replacement = "", p.adj))),
+                 npcx = 0.975, npcy = 0.975#,
+                 # table.theme = ttheme_gtlight
+                 ) +
+  scale_fill_manual(values = c("#129246",
+                               "#0C7A3A",
+                               "#055C2B",
+                               "#FF0000",
+                               "#CC0404",
+                               "#8A0202",
+                               "#5C0202",
+                               "#E6C66E",
+                               "#BD992D",
+                               "gray85"),
+                    labels = c("Enterococcus faecium",
+                               "Enterococcus faecalis",
+                               "Enterococcus avium",
+                               "Klebsiella pneumoniae",
+                               "Escherichia coli",
+                               "Proteus mirabilis",
+                               "Citrobacter freundii",
+                               "Other Bacterial Infection",
+                               "Culture Negative",
+                               "No Stool Sample")
+                    ) +
+    labs(fill = "Infecting Organism",
+       y = "Number of Infections\n(Including Reinfections)") +
+  scale_y_continuous(expand = expansion(add = c(0.25)))
+gg_diversity_infx
+
+ggsave(plot = gg_diversity_infx,
+            filename = "./Results/Supplemental_Figure_5B.pdf",
+            height = 6,
+            width = 8)
+```
+
+## Validation Cohort
+### Import data
+```{r, validation-load-data, message=FALSE, warning=FALSE}
+# First samples lookup
+vc_first_samps <- readRDS("./Data/validation_cohort_first_samps.rds")
+
+# All sample lookup
+vc_all_samps <- readRDS("./Data/validation_cohort_all_samps.rds")
+
+# All samples
+vc_peri_criteria_all <- readRDS("./Data/validation_cohort_peri_criteria_all_anon.rds")
+
+# Antibiotics data
+vc_abx <- readRDS("./Data/validation_cohort_abx.rds")
+
+# Demographics data
+vc_demo <- readRDS("./Data/validation_cohort_demo.rds") %>% mutate(race = recode(race, `Black or African-American` = "Black/African-American",
+                                                                   `Unknown or Patient unable to respond` = "Unknown"))
+
+# Metagenomic
+vc_metaphlan_df <- readRDS("./Data/validation_cohort_metaphlan.rds")
+
+# Peri-transplant samples
+vc_metaphlan_peri <- readRDS("./Data/validation_cohort_metahplan_peri.rds")
+
+# Qualitative metabolomics
+vc_metab_qual <- readRDS("./Data/validation_cohort_metab_qual.rds")
+```
+
+### Diversity Groups
+```{r, validation-diversity-groups, message=FALSE, warning=FALSE}
+vc_diversity_thresh <- metaphlan_df_sumry %>% 
+  filter(diversity_group != "Healthy Donor") %>% 
+  select(diversity_group, Shannon) %>% 
+  group_by(diversity_group) %>% 
+  dplyr::slice_max(Shannon, with_ties = FALSE)
+
+vc_t_metaphlan <- vc_metaphlan_df %>%
+  right_join(vc_first_samps %>% mutate(sampleID = recode(sampleID, `vc-011-02` = "vc-011-01", `vc-012-02` = "vc-012-01"))) %>% 
+  mutate(db = "Liver Transplant") %>% 
+  select(sampleID, taxid, db, pctseqs, Total) %>% 
+  group_by(sampleID, taxid, pctseqs) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  filter(pctseqs >= 0.0001) %>% 
+  group_by(sampleID) %>% 
+  dplyr::add_count(taxid, name = "totalSp") %>% 
+  mutate(sampleID_count = length(unique(sampleID)),
+         spPres = totalSp/sampleID_count) %>%
+  filter(spPres >= 0.10) %>% 
+  select(-c(Total, sampleID_count, spPres, totalSp)) %>% 
+  group_by(sampleID) %>% 
+  mutate(pctseqs = pctseqs/sum(pctseqs))
+
+
+vc_t_metaphlan_mat <- vc_t_metaphlan %>%
+  distinct() %>% 
+  pivot_wider(names_from = "taxid", values_from = "pctseqs", values_fill = 0) %>% 
+  column_to_rownames(var = "sampleID") %>% 
+  select(-db)
+
+# Alpha Diversity matrix: Shannon
+vc_alpha_shannon <- vegan::diversity(vc_t_metaphlan_mat, index = "shannon") %>%
+  as.data.frame() %>% 
+  rownames_to_column(var = "sampleID") %>% 
+  dplyr::rename("Shannon" = ".")
+
+#### Plot Metaphlan Relative Abundance ####
+# MetaPhlAn4 Taxonomy
+
+vc_metaphlan_df2 <- vc_t_metaphlan %>% 
+  mutate(db = factor(db, levels = c("Liver Transplant"))) %>% 
+  left_join(tax_lookup) %>% 
+  drop_na(taxid) %>% 
+  arrange(Kingdom, Phylum, Class, Order, Family, Genus) %>%
+  mutate(Genus = paste0(Phylum,"-",Order,"-", Family, "-",Genus)) %>% 
+  left_join(vc_alpha_shannon) %>%
+  group_by(sampleID) %>% 
+  arrange(Genus) %>% 
+  mutate(cum.pct = cumsum(pctseqs), 
+         y.text = (cum.pct + c(0, cum.pct[-length(cum.pct)]))/2) %>% 
+  ungroup() %>%
+  dplyr::select(-cum.pct)
+
+vc_metaphlan_pal <- getRdpPal(vc_metaphlan_df2)
+
+gg_vc_metaphlan <- vc_metaphlan_df2 %>%
+  right_join(vc_first_samps %>% mutate(sampleID = recode(sampleID, `vc-011-02` = "vc-011-01", `vc-012-02` = "vc-012-01"))) %>%
+  mutate(diversity_group = case_when(Shannon <= vc_diversity_thresh$Shannon[vc_diversity_thresh$diversity_group == "Low Diversity"] ~"Low Diversity",
+                                     Shannon > vc_diversity_thresh$Shannon[vc_diversity_thresh$diversity_group == "Low Diversity"] & Shannon <= vc_diversity_thresh$Shannon[vc_diversity_thresh$diversity_group == "Medium Diversity"] ~"Medium Diversity",
+                                     Shannon > vc_diversity_thresh$Shannon[vc_diversity_thresh$diversity_group == "Medium Diversity"] ~"High Diversity")) %>% 
+  drop_na(diversity_group) %>% 
+  mutate(diversity_group = factor(diversity_group, levels = c("Low Diversity", "Medium Diversity", "High Diversity"))) %>% 
+  ungroup() %>% 
+  mutate(Genus = factor(Genus, levels = unique(Genus))) %>% 
+  group_by(sampleID) %>% 
+  arrange(Genus) %>% 
+  ggplot(aes(x=reorder(sampleID, Shannon),y=pctseqs)) +
+  geom_bar(stat="identity",aes(fill=Genus), width = 0.9) +
+  scale_fill_manual(values = vc_metaphlan_pal) +
+  theme_bw() + 
+  theme(legend.position = "none",
+        axis.text.x=eb(),
+        axis.ticks.x=eb(),
+        strip.text.x= et(angle=0,size=14),
+        strip.background = eb(),
+        axis.title.y = et(color = "black", size = 14),
+        axis.text.y = et(color = "black", size = 12),
+        panel.spacing = unit(0.5, "lines"),
+        plot.margin = margin(t = 5,
+                             r = 5,
+                             b = 0,
+                             l = 5)
+        ) +
+  facet_grid(. ~diversity_group, scales = "free", space = "free")+
+  scale_y_continuous(expand = expansion(mult = c(0.005,0.005)),
+                     labels = scales::percent_format(accuracy = 1)) +
+  ylab("MetaPhlAn4 Relative Abundance") +
+  xlab("")
+
+
+# Color facets
+gg_vc_metaphlan_grob <- ggplot_gtable(ggplot_build(gg_vc_metaphlan))
+vc_strip_both <- which(grepl('strip-', gg_vc_metaphlan_grob$layout$name))
+vc_fills <- diversity_group_colors[c(1:3)]
+vc_k <- 1
+for (i in vc_strip_both) {
+  vc_l <- which(grepl('titleGrob', gg_vc_metaphlan_grob$grobs[[i]]$grobs[[1]]$childrenOrder))
+  gg_vc_metaphlan_grob$grobs[[i]]$grobs[[1]]$children[[vc_l]]$children[[1]]$gp$col <- fills[vc_k]
+  vc_k <- vc_k+1
+}
+
+gg_vc_shannon <- vc_alpha_shannon %>% 
+  mutate(diversity_group = case_when(Shannon <= vc_diversity_thresh$Shannon[vc_diversity_thresh$diversity_group == "Low Diversity"] ~"Low Diversity",
+                                     Shannon > vc_diversity_thresh$Shannon[vc_diversity_thresh$diversity_group == "Low Diversity"] & Shannon <= vc_diversity_thresh$Shannon[vc_diversity_thresh$diversity_group == "Medium Diversity"] ~"Medium Diversity",
+                                     Shannon > vc_diversity_thresh$Shannon[vc_diversity_thresh$diversity_group == "Medium Diversity"] ~"High Diversity")) %>% 
+  drop_na(diversity_group) %>% 
+  mutate(diversity_group = factor(diversity_group, levels = c("Low Diversity", "Medium Diversity", "High Diversity"))) %>% 
+  ggplot(aes(x=reorder(sampleID, Shannon), y = Shannon)) +
+  geom_bar(stat="identity",aes(fill=diversity_group), width = 0.9) +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.text.x = eb(),
+        axis.title.x = eb(),
+        axis.ticks.x = eb(),
+        strip.text = eb(),
+        strip.background = er(fill = "white"),
+        axis.title.y = et(color = "black", size = 14),
+        axis.text.y = et(color = "black", size = 12),
+        panel.spacing = unit(0.5, "lines"),
+        plot.margin = margin(t = 0,
+                             r = 5, 
+                             b = 0, 
+                             l = 5),
+        panel.grid = eb()) +
+  scale_fill_manual(values = diversity_group_colors[c(1:3)]) +
+  facet_grid(. ~diversity_group, scales = "free", space = "free")
+
+gg_vc_metaphlan_shannon <-
+plot_grid(
+  gg_vc_metaphlan_grob,
+  gg_vc_shannon,
+  axis = "lb",
+  align = "hv",
+  nrow = 2,
+  rel_heights = c(1, 0.15)
+)
+
+pdf(file = "./Results/VC_Metaphlan_Diversity.pdf", width = 12.25, height = 8)
+gg_vc_metaphlan_shannon 
+invisible(dev.off())
+```
+
+### sPLS-DA Diversity Groups
+```{r, validation-splsda-diversity-groups, message=FALSE, warning=FALSE}
+# Re-train/tune original model on ALL original data:
+# Train the model to tune hyperparameters
+# Initial model to find optimal number of components to include
+tot_diversity_train_splsda <- mixOmics::splsda(diversity_metab_mat, diversity_metab_labs, ncomp = 5)
+
+# Performance assessment
+## 5-fold, 50-repeat cross validation
+set.seed(1234)
+tot_diversity_train_plsda_perf <-
+  perf(
+    tot_diversity_train_splsda,
+    validation = "Mfold",
+    folds = 5,
+    progressBar = FALSE,
+    auc = TRUE,
+    nrepeat = 50
+  )
+
+plot(
+  tot_diversity_train_plsda_perf,
+  col = color.mixo(5:7),
+  sd = FALSE,
+  auc = TRUE,
+  legend.position = "horizontal"
+) # ncomp = 4 might be best for classification error rate and max.dist
+
+# Number of optimal variables to select for each component
+tot_diversity_train_keepX <- c(1:10,  seq(20, 130, 10))
+
+set.seed(123)
+tot_diversity_train_tune_splsda <-
+  mixOmics::tune.splsda(
+    diversity_metab_mat,
+    diversity_metab_labs,
+    ncomp = 4, # Choose 4 components (max) to be safe
+    validation = 'Mfold',
+    folds = 5,
+    dist = 'max.dist',
+    progressBar = FALSE,
+    auc = TRUE,
+    measure = "BER",
+    test.keepX = tot_diversity_train_keepX,
+    nrepeat = 50
+  )
+
+plot(tot_diversity_train_tune_splsda, col = color.jet(4))
+
+tot_diversity_error <- tot_diversity_train_tune_splsda$error.rate
+tot_diversity_ncomp <- tot_diversity_train_tune_splsda$choice.ncomp$ncomp # optimal number of components based on t-tests on the error rate
+tot_diversity_ncomp #1 component is optimal
+
+tot_diversity_select_keepX <- tot_diversity_train_tune_splsda$choice.keepX[1:ifelse(tot_diversity_ncomp == 1, tot_diversity_ncomp + 1, tot_diversity_ncomp)]  # optimal number of variables to select per component
+tot_diversity_select_keepX
+
+
+# Final Model
+tot_diversity_splsda_final <-
+  mixOmics::splsda(diversity_metab_mat, diversity_metab_labs, ncomp = ifelse(tot_diversity_ncomp == 1, tot_diversity_ncomp + 1, tot_diversity_ncomp), keepX = tot_diversity_select_keepX)
+
+# Needed for downstream excel file for component loadings
+tot_diversity_splsda_final_copy <- tot_diversity_splsda_final
+
+# Build data matrix
+vc_diversity_metab_mat <-
+  vc_metab_qual %>%
+  ungroup() %>% 
+  select(patientID, sampleID, compound, mvalue) %>% 
+  inner_join(vc_first_samps %>% mutate(sampleID = recode(sampleID, `vc-011-02` = "vc-011-01", `vc-012-02` = "vc-012-01"))) %>% 
+  mutate(compound = str_to_title(compound)) %>%
+  filter(compound %in% heatmap_cmpds$compound|is.na(compound)) %>% 
+  ungroup() %>%
+  left_join(
+    vc_metaphlan_df2 %>%
+      right_join(vc_first_samps %>% mutate(
+        sampleID = recode(sampleID, `vc-011-02` = "vc-011-01", `vc-012-02` = "vc-012-01")
+      )) %>%
+      mutate(
+        diversity_group = case_when(
+          Shannon <= vc_diversity_thresh$Shannon[vc_diversity_thresh$diversity_group == "Low Diversity"] ~
+            "Low Diversity",
+          Shannon > vc_diversity_thresh$Shannon[vc_diversity_thresh$diversity_group == "Low Diversity"] &
+            Shannon <= vc_diversity_thresh$Shannon[vc_diversity_thresh$diversity_group == "Medium Diversity"] ~
+            "Medium Diversity",
+          Shannon > vc_diversity_thresh$Shannon[vc_diversity_thresh$diversity_group == "Medium Diversity"] ~
+            "High Diversity"
+        ),
+        diversity_group_abv = recode(diversity_group, `Low Diversity` = "Low", `Medium Diversity` = "Medium", `High Diversity` = "High")
+      ) %>%
+      drop_na(diversity_group, diversity_group_abv) %>%
+      mutate(
+        # diversity_group_abv = factor(diversity_group_abv, levels = c("Low", "Medium", "High")),
+        diversity_group = factor(
+        diversity_group,
+        levels = c("Low Diversity", "Medium Diversity", "High Diversity")
+      )) %>% 
+      ungroup() %>% 
+      distinct(sampleID, diversity_group_abv)
+  ) %>% 
+  group_by(sampleID, compound, diversity_group_abv) %>% 
+  # summarise(mvalue = mean(mvalue, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  mutate_all(~replace(., is.nan(.), NA)) %>%
+  select(sampleID, compound, mvalue, diversity_group_abv) %>% 
+  drop_na(sampleID) %>% 
+  pivot_wider(names_from = "compound", values_from = "mvalue") %>% 
+  # mutate_all(~replace(., is.na(.), 0)) %>% 
+  filter(sampleID != "") %>%
+  column_to_rownames(var = "sampleID") %>% 
+  select(-diversity_group_abv) %>%
+  select(names(diversity_metab_mat)) %>% 
+  filter_all(any_vars(!is.na(.)))
+
+# Build labels matrix
+vc_diversity_metab_labs <-
+  vc_diversity_metab_mat %>% 
+  rownames_to_column(var = "sampleID") %>% 
+  left_join(
+    vc_metaphlan_df2 %>%
+      right_join(vc_first_samps %>% mutate(
+        sampleID = recode(sampleID, `vc-011-02` = "vc-011-01", `vc-012-02` = "vc-012-01")
+      )) %>%
+      mutate(
+        diversity_group = case_when(
+          Shannon <= vc_diversity_thresh$Shannon[vc_diversity_thresh$diversity_group == "Low Diversity"] ~
+            "Low Diversity",
+          Shannon > vc_diversity_thresh$Shannon[vc_diversity_thresh$diversity_group == "Low Diversity"] &
+            Shannon <= vc_diversity_thresh$Shannon[vc_diversity_thresh$diversity_group == "Medium Diversity"] ~
+            "Medium Diversity",
+          Shannon > vc_diversity_thresh$Shannon[vc_diversity_thresh$diversity_group == "Medium Diversity"] ~
+            "High Diversity"
+        ),
+        diversity_group_abv = recode(diversity_group, `Low Diversity` = "Low", `Medium Diversity` = "Medium", `High Diversity` = "High")
+      ) %>%
+      drop_na(diversity_group, diversity_group_abv) %>%
+      mutate(
+        diversity_group_abv = factor(diversity_group_abv, levels = c("Low", "Medium", "High")),
+        # diversity_group = factor(
+        # diversity_group,
+        # levels = c("Low Diversity", "Medium Diversity", "High Diversity")
+      # )
+    ) %>%
+      ungroup() %>% 
+      distinct(sampleID, diversity_group_abv)
+  ) %>% 
+  droplevels() %>% 
+  pull(diversity_group_abv)
+
+dim(vc_diversity_metab_mat) #35 93 (means 93 compounds and 35 LT patients)
+length(vc_diversity_metab_labs) #35 (means 35 LT patients/infections)
+
+
+# Predict using model
+vc_diversity_tot <- predict(tot_diversity_splsda_final, 
+                            vc_diversity_metab_mat,
+                            dist = "all")
+
+vc_diversity_tot_predict <- factor(vc_diversity_tot$class$max.dist[,tot_diversity_ncomp], levels = c("Low", "Medium", "High"))
+
+vc_diversity_tot_union <- factor(union(vc_diversity_tot_predict, vc_diversity_metab_labs), levels = c("Low", "Medium", "High"))
+
+vc_diversity_cm <-
+  confusionMatrix(table(
+    # factor(
+      vc_diversity_tot_predict,
+      # vc_diversity_tot_union),
+    # factor(
+      vc_diversity_metab_labs#,
+      # vc_diversity_tot_union
+    # )
+  ))
+
+vc_diversity_cm
+
+# Additional model measures
+vc_diversity_epi <- mltest::ml_test(predicted = factor(vc_diversity_tot_predict, levels = c("Low", "Medium", "High")),
+                                    true = factor(vc_diversity_metab_labs, levels = c("Low", "Medium", "High")))
+
+vc_diversity_cm_names <- vc_diversity_cm$table
+
+colnames(vc_diversity_cm_names) <- c("Actual\nLow", "Actual\nMedium", "Actual\nHigh")
+rownames(vc_diversity_cm_names) <- c("Predicted\nLow", "Predicted\nMedium", "Predicted\nHigh")
+
+vc_diversity_confusion_df <- vc_diversity_cm_names %>% 
+  t() 
+
+vc_diversity_confusion_df
+
+# multiclass 95% CI
+vc_diversity_mc <- 
+biostatUtil::multiClassCM(
+  factor(vc_diversity_metab_labs, levels = c("Low", "Medium", "High")),
+  factor(vc_diversity_tot_predict, levels = c("Low", "Medium", "High")),
+  seed = 20,
+  num.boot = 1000,
+  conf.level = 0.95,
+  digits = 2,
+  method = "wilson"
+)
+
+vc_diversity_mc_table <- vc_diversity_mc$table %>% 
+  as.data.frame() %>% 
+  separate(., Low, into = c("X1", "X2", "X3", "X4"), sep = " ") %>% 
+  select(Average, "Low_Avg" = X1, "Low_Lower" = X2, "Low_Upper" = X4, Medium, High) %>% 
+  separate(., Medium, into = c("X1", "X2", "X3", "X4"), sep = " ") %>% 
+  select(Average, Low_Avg, Low_Lower, Low_Upper, "Med_Avg" = X1, "Med_Lower" = X2, "Med_Upper" = X4, High) %>%
+  separate(., High, into = c("X1", "X2", "X3", "X4"), sep = " ") %>% 
+  select(Average, Low_Avg, Low_Lower, Low_Upper, Med_Avg, Med_Lower, Med_Upper, "High_Avg" = X1, "High_Lower" = X2, "High_Upper" = X4) %>% 
+  mutate_all(funs(str_replace(., "\\(|\\)", ""))) %>% 
+  mutate_if(is.character,as.numeric)
+```
+
+### sPLS-DA Enterococcus Expansion
+```{r, validation-splsda-ecoc-expan, warning=FALSE, message=FALSE}
+# Train the model to tune hyperparameters
+# Initial model to find optimal number of components to include
+tot_ecoc_doms_train_splsda <- mixOmics::splsda(ecoc_doms_metab_mat, ecoc_doms_metab_labs, ncomp = 5)
+
+# Performance assessment
+## 5-fold, 50-repeat cross validation
+set.seed(1234)
+tot_ecoc_doms_train_plsda_perf <-
+  perf(
+    tot_ecoc_doms_train_splsda,
+    validation = "Mfold",
+    folds = 5,
+    progressBar = FALSE,
+    auc = TRUE,
+    nrepeat = 50
+  )
+
+plot(
+  tot_ecoc_doms_train_plsda_perf,
+  col = color.mixo(5:7),
+  sd = FALSE,
+  auc = TRUE,
+  legend.position = "horizontal"
+) # ncomp = 1 or 4 is best for classification error rate and max.dist
+
+# Number of optimal variables to select for each component
+tot_ecoc_doms_train_keepX <- c(1:10,  seq(20, 108, 10))
+
+set.seed(123)
+tot_ecoc_doms_train_tune_splsda <-
+  mixOmics::tune.splsda(
+    ecoc_doms_metab_mat,
+    ecoc_doms_metab_labs,
+    ncomp = 4, # Choose 4 components (max) to be safe
+    validation = 'Mfold',
+    folds = 5,
+    dist = 'max.dist',
+    progressBar = FALSE,
+    auc = TRUE,
+    measure = "BER",
+    test.keepX = tot_ecoc_doms_train_keepX,
+    nrepeat = 50
+  )
+
+plot(tot_ecoc_doms_train_tune_splsda, col = color.jet(4))
+
+tot_ecoc_doms_train_error <- tot_ecoc_doms_train_tune_splsda$error.rate
+tot_ecoc_doms_train_ncomp <- tot_ecoc_doms_train_tune_splsda$choice.ncomp$ncomp # optimal number of components based on t-tests on the error rate
+# tot_ecoc)doms_train_ncomp = 4 #4 components are optimal via visual inspection
+
+tot_ecoc_doms_train_select_keepX <- tot_ecoc_doms_train_tune_splsda$choice.keepX[1:ifelse(tot_ecoc_doms_train_ncomp == 1, tot_ecoc_doms_train_ncomp + 1, tot_ecoc_doms_train_ncomp)]  # optimal number of variables to select per component
+tot_ecoc_doms_train_select_keepX
+
+
+# Final Model
+tot_ecoc_doms_train_splsda_final <-
+  mixOmics::splsda(ecoc_doms_metab_mat, ecoc_doms_metab_labs, ncomp = ifelse(tot_ecoc_doms_train_ncomp == 1, tot_ecoc_doms_train_ncomp + 1, tot_ecoc_doms_train_ncomp), keepX = tot_ecoc_doms_train_select_keepX)
+
+# Needed for downstream excel file for component loadings
+tot_ecoc_doms_train_splsda_final_copy <- tot_ecoc_doms_train_splsda_final
+
+vc_ecoc <- vc_metaphlan_df2 %>%
+      right_join(vc_first_samps %>% mutate(
+        sampleID = recode(sampleID, `vc-011-02` = "vc-011-01", `vc-012-02` = "vc-012-01")
+      )) %>%
+      group_by(sampleID) %>% 
+      filter(grepl(x = Genus, pattern = "Enterococcus", ignore.case = TRUE)) %>% 
+      count(sampleID, wt = pctseqs, name = "enterococcus_rel_abundance") %>% 
+  full_join(vc_first_samps %>% ungroup() %>% mutate(sampleID = recode(sampleID, `vc-011-02` = "vc-011-01", `vc-012-02` = "vc-012-01")) %>% select(sampleID)) %>% 
+  mutate(enterococcus_rel_abundance = ifelse(is.na(enterococcus_rel_abundance), 0, enterococcus_rel_abundance),
+         domination = case_when(enterococcus_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[2] ~ "Expansion",
+                                TRUE ~ "No Expansion")) %>%
+      drop_na(domination) %>%
+      ungroup() %>% 
+      distinct(sampleID, domination)
+  
+  
+vc_ecoc_doms_metab_mat <-
+ vc_metab_qual %>% 
+  ungroup() %>% 
+  select(patientID, sampleID, compound, mvalue) %>% 
+  inner_join(vc_first_samps %>% mutate(sampleID = recode(sampleID, `vc-011-02` = "vc-011-01", `vc-012-02` = "vc-012-01"))) %>% 
+  mutate(compound = str_to_title(compound)) %>%
+  filter(compound %in% heatmap_cmpds$compound|is.na(compound)) %>% 
+  ungroup() %>%
+  left_join(vc_ecoc) %>% 
+  group_by(sampleID, compound, domination) %>% 
+  # summarise(mvalue = mean(mvalue, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  mutate_all(~replace(., is.nan(.), NA)) %>%
+  select(sampleID, compound, mvalue, domination) %>% 
+  drop_na(sampleID) %>% 
+  pivot_wider(names_from = "compound", values_from = "mvalue") %>% 
+  # mutate_all(~replace(., is.na(.), 0)) %>% 
+  filter(sampleID != "") %>%
+  filter_all(any_vars(!is.na(.))) %>% 
+  select(-domination) %>% 
+  column_to_rownames(var = "sampleID") %>% 
+  select(names(ecoc_doms_metab_mat) %>% as.data.frame() %>% dplyr::rename(compound = ".") %>% mutate(compound = recode(compound, `Omega-Muricholic Acid` = "3-Epicholic Acid Or Omega-Muricholic Acid")) %>% pull(compound)) %>% 
+  filter_all(any_vars(!is.na(.)))
+
+  
+vc_ecoc_doms_metab_labs <-
+  vc_ecoc_doms_metab_mat %>% 
+  rownames_to_column(var = "sampleID") %>% 
+  left_join(vc_ecoc) %>% 
+  pull(domination)
+
+dim(vc_ecoc_doms_metab_mat) #35 93 (means 93 compounds and 35 LT patients)
+length(vc_ecoc_doms_metab_labs) #35 (means 35 LT patients)
+
+# Model metrics for all samples
+vc_ecoc_doms_tot <- predict(tot_ecoc_doms_train_splsda_final,
+                        vc_ecoc_doms_metab_mat,
+                        dist = "all")
+
+vc_ecoc_doms_tot_predict <- vc_ecoc_doms_tot$class$mahalanobis.dist[,tot_ecoc_doms_train_ncomp]
+
+vc_ecoc_doms_tot_union <- union(vc_ecoc_doms_tot_predict, vc_ecoc_doms_metab_labs)
+
+vc_ecoc_doms_cm <- confusionMatrix(table(factor(vc_ecoc_doms_tot_predict, vc_ecoc_doms_tot_union,
+                                        levels = c("Expansion","No Expansion")),
+                      factor(vc_ecoc_doms_metab_labs, vc_ecoc_doms_tot_union,
+                             levels = c("Expansion","No Expansion"))),
+                      positive = "Expansion")
+vc_ecoc_doms_cm
+
+# Additional model measures
+vc_ecoc_doms_epi <- epiR::epi.tests(table(vc_ecoc_doms_tot_predict, vc_ecoc_doms_metab_labs), conf.level = 0.95)
+
+vc_ecoc_doms_confusion_df <- vc_ecoc_doms_epi$tab %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "actual") %>% 
+  mutate(actual = case_when(grepl(actual, pattern = "+", fixed = TRUE) ~ "Actual\nExpansion",
+                            grepl(actual, pattern = "-", fixed = TRUE) ~ "Actual\nNo Expansion",
+                            TRUE ~ "Total")) %>% 
+  dplyr::rename("Predicted\nExpansion" = "Test +",
+                "Predicted\nNo Expansion" = "Test -") %>% 
+  column_to_rownames(var = "actual")
+
+vc_ecoc_doms_confusion_df
+
+# odds ratio
+vc_ecoc_doms_epi$detail[2][6,]
+```
+
+### sPLS-DA Enterobacterales Expansion
+```{r, validation-splsda-ebac-expan, warning=FALSE, message=FALSE}
+# Train the model to tune hyperparameters
+# Initial model to find optimal number of components to include
+tot_ebac_doms_train_splsda <- mixOmics::splsda(ebac_doms_metab_mat, ebac_doms_metab_labs, ncomp = 5)
+
+# Performance assessment
+## 5-fold, 50-repeat cross validation
+set.seed(3456)
+tot_ebac_doms_train_plsda_perf <-
+  perf(
+    tot_ebac_doms_train_splsda,
+    validation = "Mfold",
+    folds = 5,
+    progressBar = FALSE,
+    auc = TRUE,
+    nrepeat = 50
+  )
+
+plot(
+  tot_ebac_doms_train_plsda_perf,
+  col = color.mixo(5:7),
+  sd = FALSE,
+  auc = TRUE,
+  legend.position = "horizontal"
+) # ncomp = 2 seems best for classification error rate and max.dist
+
+# Number of optimal variables to select for each component
+tot_ebac_doms_train_keepX <- c(1:10,  seq(20, 108, 10))
+
+set.seed(123)
+tot_ebac_doms_train_tune_splsda <-
+  mixOmics::tune.splsda(
+    ebac_doms_metab_mat,
+    ebac_doms_metab_labs,
+    ncomp = 3, # Choose 3 components (max) to be safe
+    validation = 'Mfold',
+    folds = 5,
+    dist = 'max.dist',
+    progressBar = FALSE,
+    auc = TRUE,
+    measure = "BER",
+    test.keepX = tot_ebac_doms_train_keepX,
+    nrepeat = 50
+  )
+
+plot(tot_ebac_doms_train_tune_splsda, col = color.jet(3))
+
+tot_ebac_doms_train_error <- tot_ebac_doms_train_tune_splsda$error.rate
+tot_ebac_doms_train_ncomp <- tot_ebac_doms_train_tune_splsda$choice.ncomp$ncomp # optimal number of components based on t-tests on the error rate
+# tot_ebac_doms_train_ncomp = 2 #4 components are optimal via visual inspection
+
+tot_ebac_doms_train_select_keepX <- tot_ebac_doms_train_tune_splsda$choice.keepX[1:ifelse(tot_ebac_doms_train_ncomp == 1, tot_ebac_doms_train_ncomp + 1, tot_ebac_doms_train_ncomp)]  # optimal number of variables to select per component
+tot_ebac_doms_train_select_keepX
+
+
+# Final Model
+tot_ebac_doms_train_splsda_final <-
+  mixOmics::splsda(ebac_doms_metab_mat, ebac_doms_metab_labs, ncomp = ifelse(tot_ebac_doms_train_ncomp == 1, tot_ebac_doms_train_ncomp + 1, tot_ebac_doms_train_ncomp), keepX = tot_ebac_doms_train_select_keepX)
+
+# Needed for downstream excel file for component loadings
+tot_ebac_doms_train_splsda_final_copy <- tot_ebac_doms_train_splsda_final
+
+vc_ebac <- vc_metaphlan_df2 %>%
+      right_join(vc_first_samps %>% mutate(
+        sampleID = recode(sampleID, `vc-011-02` = "vc-011-01", `vc-012-02` = "vc-012-01")
+      )) %>%
+      group_by(sampleID) %>% 
+      filter(grepl(x = Genus, pattern = "Enterobacterales", ignore.case = TRUE)) %>% 
+      count(sampleID, wt = pctseqs, name = "enterobacterales_rel_abundance") %>% 
+  full_join(vc_first_samps %>% ungroup() %>% mutate(sampleID = recode(sampleID, `vc-011-02` = "vc-011-01", `vc-012-02` = "vc-012-01")) %>% select(sampleID)) %>% 
+  mutate(enterobacterales_rel_abundance = ifelse(is.na(enterobacterales_rel_abundance), 0, enterobacterales_rel_abundance),
+         domination = case_when(enterobacterales_rel_abundance >= optimal_cutpoint_rel$optimal_cutpoint[1] ~ "Expansion",
+                                TRUE ~ "No Expansion")) %>%
+      drop_na(domination) %>%
+      ungroup() %>% 
+      distinct(sampleID, domination)
+  
+  
+vc_ebac_doms_metab_mat <-
+  vc_metab_qual %>% 
+  ungroup() %>% 
+  select(patientID, sampleID, compound, mvalue#, 
+        
+         ) %>% 
+  inner_join(vc_first_samps %>% mutate(sampleID = recode(sampleID, `vc-011-02` = "vc-011-01", `vc-012-02` = "vc-012-01"))) %>% 
+  mutate(compound = str_to_title(compound)) %>%
+  filter(compound %in% heatmap_cmpds$compound|is.na(compound)) %>% 
+  ungroup() %>%
+  left_join(vc_ebac) %>% 
+  group_by(sampleID, compound, domination) %>% 
+  # summarise(mvalue = mean(mvalue, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  mutate_all(~replace(., is.nan(.), NA)) %>%
+  select(sampleID, compound, mvalue, domination) %>% 
+  drop_na(sampleID) %>% 
+  pivot_wider(names_from = "compound", values_from = "mvalue") %>% 
+  mutate_all(~replace(., is.na(.), 0)) %>%
+  filter(sampleID != "") %>%
+  filter_all(any_vars(!is.na(.))) %>% 
+  select(-domination) %>% 
+  column_to_rownames(var = "sampleID") %>% 
+  select(names(ebac_doms_metab_mat) %>% as.data.frame() %>% dplyr::rename(compound = ".") %>% mutate(compound = recode(compound, `Omega-Muricholic Acid` = "3-Epicholic Acid Or Omega-Muricholic Acid")) %>% pull(compound)) %>% 
+  filter_all(any_vars(!is.na(.)))
+
+  
+vc_ebac_doms_metab_labs <-
+  vc_ebac_doms_metab_mat %>% 
+  rownames_to_column(var = "sampleID") %>% 
+  left_join(vc_ebac) %>% 
+  pull(domination)
+
+dim(vc_ebac_doms_metab_mat) #35 93 (means 93 compounds and 35 LT patients)
+length(vc_ebac_doms_metab_labs) #35 (means 35 LT patients)
+
+# Model metrics for all samples
+vc_ebac_doms_tot <- predict(tot_ebac_doms_train_splsda_final,
+                        vc_ebac_doms_metab_mat,
+                        dist = "all")
+
+vc_ebac_doms_tot_predict <- vc_ebac_doms_tot$class$mahalanobis.dist[,tot_ebac_doms_train_ncomp]
+
+vc_ebac_doms_tot_union <- union(vc_ebac_doms_tot_predict, vc_ebac_doms_metab_labs)
+
+vc_ebac_doms_cm <- confusionMatrix(table(factor(vc_ebac_doms_tot_predict, vc_ebac_doms_tot_union,
+                                        levels = c("No Expansion","Expansion")),
+                      factor(vc_ebac_doms_metab_labs, vc_ebac_doms_tot_union,
+                             levels = c("No Expansion","Expansion"))),
+                      positive = "Expansion")
+vc_ebac_doms_cm
+
+# Additional model measures
+vc_ebac_doms_epi <- epiR::epi.tests(table(vc_ebac_doms_tot_predict, vc_ebac_doms_metab_labs), conf.level = 0.95)
+
+vc_ebac_doms_confusion_df <- vc_ebac_doms_epi$tab %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "actual") %>% 
+  mutate(actual = case_when(grepl(actual, pattern = "+", fixed = TRUE) ~ "Actual\nExpansion",
+                            grepl(actual, pattern = "-", fixed = TRUE) ~ "Actual\nNo Expansion",
+                            TRUE ~ "Total")) %>% 
+  dplyr::rename("Predicted\nExpansion" = "Test +",
+                "Predicted\nNo Expansion" = "Test -") %>% 
+  column_to_rownames(var = "actual")
+
+vc_ebac_doms_confusion_df
+
+# odds ratio
+vc_ebac_doms_epi$detail[2][6,]
+```
+
+### sPLS-DA Any Infection
+```{r, validation-splsda-any-infection, warning=FALSE, message=FALSE}
+# Train the model to tune hyperparameters
+# Initial model to find optimal number of components to include
+tot_infx_train_splsda <- mixOmics::splsda(infx_metab_mat, infx_metab_labs, ncomp = 5)
+
+# Performance assessment
+## 5-fold, 100-repeat cross validation
+set.seed(1234)
+tot_infx_train_plsda_perf <-
+  perf(
+    tot_infx_train_splsda,
+    validation = "Mfold",
+    folds = 5,
+    progressBar = FALSE,
+    auc = TRUE,
+    nrepeat = 50
+  )
+
+plot(
+  tot_infx_train_plsda_perf,
+  col = color.mixo(5:7),
+  sd = FALSE,
+  auc = TRUE,
+  legend.position = "horizontal"
+) # ncomp = 1 is best for classification error rate and max.dist
+
+# Number of optimal variables to select for each component
+tot_infx_train_keepX <- c(1:10,  seq(20, 108, 10))
+
+set.seed(5678)
+tot_infx_train_tune_splsda <-
+  mixOmics::tune.splsda(
+    infx_metab_mat,
+    infx_metab_labs,
+    ncomp = 3, # Choose 3 components (max) to be safe
+    validation = 'Mfold',
+    folds = 5,
+    dist = 'max.dist',
+    progressBar = FALSE,
+    auc = TRUE,
+    measure = "BER",
+    test.keepX = tot_infx_train_keepX,
+    nrepeat = 100
+  )
+
+plot(tot_infx_train_tune_splsda, col = color.jet(3))
+
+tot_infx_train_error <- tot_infx_train_tune_splsda$error.rate
+tot_infx_train_ncomp <- tot_infx_train_tune_splsda$choice.ncomp$ncomp # optimal number of components based on t-tests on the error rate
+tot_infx_train_ncomp #3 component is optimal
+
+tot_infx_train_select_keepX <- tot_infx_train_tune_splsda$choice.keepX[1:ifelse(tot_infx_train_ncomp == 1, tot_infx_train_ncomp + 1, tot_infx_train_ncomp)]  # optimal number of variables to select per component
+tot_infx_train_select_keepX
+
+
+# Final Model
+tot_infx_train_splsda_final <-
+  mixOmics::splsda(infx_metab_mat, infx_metab_labs, ncomp = ifelse(tot_infx_train_ncomp == 1, tot_infx_train_ncomp + 1, tot_infx_train_ncomp), keepX = tot_infx_train_select_keepX)
+
+# Needed for downstream excel file for component loadings
+tot_infx_train_splsda_final_copy <- tot_infx_train_splsda_final
+
+vc_infx <- vc_peri_criteria_all %>% 
+  filter(bact_infection_present == "Yes") %>%
+  group_by(patientID, eday, infx_stool) %>% 
+  dplyr::slice(1) %>% 
+  group_by(patientID, eday) %>% 
+  filter(abs(infx_stool - 0) == min(abs(infx_stool - 0))) %>%
+  group_by(patientID) %>% 
+  dplyr::slice(1) %>% 
+  select(patientID, sampleID, bact_infection_present)
+  # ungroup() %>%
+  # select(patientID, sampleID, bact_infection_present)
+
+vc_no_infx <- vc_peri_criteria_all %>% 
+  filter(patientID %!in% vc_infx$patientID) %>% 
+  ungroup() %>% 
+  select(patientID, sampleID, bact_infection_present) %>% 
+  distinct() %>% 
+  right_join(
+    vc_first_samps %>% ungroup() %>% mutate(
+      sampleID = recode(sampleID, `vc-011-02` = "vc-011-01", `vc-012-02` = "vc-012-01")
+    ) %>% select(patientID, sampleID) %>% filter(patientID %!in% vc_infx$patientID | sampleID %!in% vc_infx$sampleID)
+  ) %>% 
+  ungroup() %>% 
+  drop_na() %>% 
+  distinct(patientID, sampleID, bact_infection_present)
+
+vc_tot_infx <- bind_rows(vc_infx, vc_no_infx)
+
+vc_infx_metab_mat <-
+  vc_metab_qual %>% 
+  ungroup() %>% 
+  select(patientID, sampleID, compound, mvalue) %>% 
+  left_join(vc_first_samps %>% mutate(sampleID = recode(sampleID, `vc-011-02` = "vc-011-01", `vc-012-02` = "vc-012-01"))) %>% 
+  mutate(compound = str_to_title(compound)) %>%
+  filter(compound %in% heatmap_cmpds$compound|is.na(compound)) %>% 
+  ungroup() %>%
+  right_join(vc_tot_infx) %>% 
+  group_by(sampleID, compound, bact_infection_present) %>% 
+  summarise(mvalue = mean(mvalue, na.rm = TRUE)) %>% 
+  ungroup() %>%
+  mutate_all(~replace(., is.nan(.), NA)) %>% 
+  select(sampleID, compound, mvalue, bact_infection_present) %>% 
+  drop_na(sampleID) %>% 
+  pivot_wider(names_from = "compound", values_from = "mvalue") %>% 
+  filter(sampleID != "") %>%
+  mutate(bact_infection_present = ifelse(grepl(x = bact_infection_present, pattern = "No"), "No Infection", "Infection")) %>% 
+  select(-bact_infection_present) %>% 
+  column_to_rownames(var = "sampleID") %>% 
+  select(names(infx_metab_mat) %>% as.data.frame() %>% dplyr::rename(compound = ".") %>% pull(compound)) %>% 
+  filter_all(any_vars(!is.na(.)))
+
+  
+vc_infx_metab_labs <-
+  vc_infx_metab_mat %>% 
+  rownames_to_column(var = "sampleID") %>% 
+  left_join(vc_peri_criteria_all %>% select(sampleID, bact_infection_present) %>% group_by(sampleID) %>% dplyr::slice(1)) %>% 
+  mutate(bact_infection_present = ifelse(grepl(x = bact_infection_present, pattern = "No"), "No Infection", "Infection")) %>% 
+  pull(bact_infection_present)
+
+dim(vc_infx_metab_mat) #35 93 (means 93 compounds and 35 LT patients/infections)
+length(vc_infx_metab_labs) #35 (means 35 LT patients/infections)
+
+
+# Model metrics for all samples
+vc_infx_tot <- predict(tot_infx_train_splsda_final,
+                        vc_infx_metab_mat,
+                        dist = "all")
+
+vc_infx_tot_predict <- vc_infx_tot$class$max.dist[, (ifelse(tot_infx_train_ncomp == 1, tot_infx_train_ncomp + 1, tot_infx_train_ncomp))]
+
+vc_infx_tot_union <- union(vc_infx_tot_predict, vc_infx_metab_labs)
+
+vc_infx_cm <- confusionMatrix(table(factor(vc_infx_tot_predict, vc_infx_tot_union,
+                                        levels = c("No Infection", "Infection")),
+                      factor(vc_infx_metab_labs, vc_infx_tot_union,
+                             levels = c("No Infection", "Infection"))),
+                      positive = "Infection")
+vc_infx_cm
+
+# as.data.frame(t(data.frame(cbind(t(vc_infx_cm$byClass),t(vc_infx_cm$overall)))))
+
+# Additional model measures
+vc_infx_epi <- epiR::epi.tests(table(vc_infx_tot_predict, vc_infx_metab_labs), conf.level = 0.95)
+
+vc_infx_confusion_df <- vc_infx_epi$tab %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "actual") %>% 
+  mutate(actual = case_when(grepl(actual, pattern = "+", fixed = TRUE) ~ "Actual\nInfection",
+                            grepl(actual, pattern = "-", fixed = TRUE) ~ "Actual\nNo Infection",
+                            TRUE ~ "Total")) %>% 
+  dplyr::rename("Predicted\nInfection" = "Test +",
+                "Predicted\nNo Infection" = "Test -") %>% 
+  column_to_rownames(var = "actual")
+
+vc_infx_confusion_df
+
+# odds ratio
+vc_infx_epi$detail[2][6,]
+```
+
+### Supplemental Figure 9: sPLS-DA Model Metrics Training/Test vs Validation
+```{r, supplemental-figure-9-model-metrics, warning=FALSE, message=FALSE, fig.height=8, fig.width=14}
+og_metrics <- data.frame(model = c("Diversity Overall: Internal Validation", 
+                                   "Diversity Low: Internal Validation",
+                                   "Diversity Medium: Internal Validation",
+                                   "Diversity High: Internal Validation",
+                                   "Enterococcus Expansion: Internal Validation", 
+                                   "Enterobacterales Expansion: Internal Validation", 
+                                   "Infection: Internal Validation"),
+                         acc = c(diversity_cm$overall[1],
+                                 diversity_mc_table$Low_Avg[8],
+                                 diversity_mc_table$Med_Avg[8],
+                                 diversity_mc_table$High_Avg[8],
+                                 ecoc_doms_cm$overall[1],
+                                 ebac_doms_cm$overall[1],
+                                 infx_cm$overall[1]
+                                       ),
+                         acc_lower = c(diversity_cm$overall[3],
+                                       diversity_mc_table$Low_Lower[8],
+                                       diversity_mc_table$Med_Lower[8],
+                                       diversity_mc_table$High_Lower[8],
+                                       ecoc_doms_cm$overall[3],
+                                       ebac_doms_cm$overall[3],
+                                       infx_cm$overall[3]
+                                       ),
+                         acc_upper = c(diversity_cm$overall[4],
+                                       diversity_mc_table$Low_Upper[8],
+                                       diversity_mc_table$Med_Upper[8],
+                                       diversity_mc_table$High_Upper[8],
+                                       ecoc_doms_cm$overall[4],
+                                       ebac_doms_cm$overall[4],
+                                       infx_cm$overall[4]),
+                         sens = c(NA,
+                                  diversity_mc_table$Low_Avg[1],
+                                  diversity_mc_table$Med_Avg[1],
+                                  diversity_mc_table$High_Avg[1],
+                                  ecoc_doms_epi$detail[2][3,],
+                                  ebac_doms_epi$detail[2][3,],
+                                  infx_epi$detail[2][3,]),
+                         sens_lower = c(NA,
+                                        diversity_mc_table$Low_Lower[1],
+                                        diversity_mc_table$Med_Lower[1],
+                                        diversity_mc_table$High_Lower[1],
+                                        ecoc_doms_epi$detail[3][3,],
+                                        ebac_doms_epi$detail[3][3,],
+                                        infx_epi$detail[3][3,]),
+                         sens_upper = c(NA,
+                                        diversity_mc_table$Low_Upper[1],
+                                        diversity_mc_table$Med_Upper[1],
+                                        diversity_mc_table$High_Upper[1],
+                                        ecoc_doms_epi$detail[4][3,],
+                                        ebac_doms_epi$detail[4][3,],
+                                        infx_epi$detail[4][3,]),
+                         spec = c(NA,
+                                  diversity_mc_table$Low_Avg[2],
+                                  diversity_mc_table$Med_Avg[2],
+                                  diversity_mc_table$High_Avg[2],
+                                  ecoc_doms_epi$detail[2][4,],
+                                  ebac_doms_epi$detail[2][4,],
+                                  infx_epi$detail[2][4,]),
+                         spec_lower = c(NA,
+                                       diversity_mc_table$Low_Lower[2],
+                                       diversity_mc_table$Med_Lower[2],
+                                       diversity_mc_table$High_Lower[2],
+                                       ecoc_doms_epi$detail[3][4,],
+                                       ebac_doms_epi$detail[3][4,],
+                                       infx_epi$detail[3][4,]),
+                         spec_upper = c(NA,
+                                        diversity_mc_table$Low_Upper[2],
+                                        diversity_mc_table$Med_Upper[2],
+                                        diversity_mc_table$High_Upper[2],
+                                       ecoc_doms_epi$detail[4][4,],
+                                       ebac_doms_epi$detail[4][4,],
+                                       infx_epi$detail[4][4,]),
+                         odds = c(NA,
+                                  diversity_epi$DOR[1],
+                                  diversity_epi$DOR[2],
+                                  diversity_epi$DOR[3],
+                                  ecoc_doms_epi$detail[2][6,],
+                                  ebac_doms_epi$detail[2][6,],
+                                  infx_epi$detail[2][6,]),
+                         odds_lower = c(NA,
+                                        NA,
+                                        NA,
+                                        NA,
+                                        ecoc_doms_epi$detail[3][6,],
+                                        ebac_doms_epi$detail[3][6,],
+                                        infx_epi$detail[3][6,]),
+                         odds_upper = c(NA,
+                                        NA,
+                                        NA,
+                                        NA,
+                                        ecoc_doms_epi$detail[4][6,],
+                                        ebac_doms_epi$detail[4][6,],
+                                        infx_epi$detail[4][6,])
+                         )# %>% 
+  # pivot_longer(!model, names_to = "metric", values_to = "metric_value") %>% 
+  # drop_na()
+
+vc_metrics <- data.frame(model = c("Diversity Overall: External Validation", 
+                                   "Diversity Low: External Validation",
+                                   "Diversity Medium: External Validation",
+                                   "Diversity High: External Validation",
+                                   "Enterococcus Expansion: External Validation", 
+                                   "Enterobacterales Expansion: External Validation", 
+                                   "Infection: External Validation"),
+                          acc = c(vc_diversity_cm$overall[1],
+                                 vc_diversity_mc_table$Low_Avg[8],
+                                 vc_diversity_mc_table$Med_Avg[8],
+                                 vc_diversity_mc_table$High_Avg[8],
+                                 vc_ecoc_doms_cm$overall[1],
+                                 vc_ebac_doms_cm$overall[1],
+                                 vc_infx_cm$overall[1]
+                                       ),
+                         acc_lower = c(vc_diversity_cm$overall[3],
+                                       vc_diversity_mc_table$Low_Lower[8],
+                                       vc_diversity_mc_table$Med_Lower[8],
+                                       vc_diversity_mc_table$High_Lower[8],
+                                       vc_ecoc_doms_cm$overall[3],
+                                       vc_ebac_doms_cm$overall[3],
+                                       vc_infx_cm$overall[3]
+                                       ),
+                         acc_upper = c(vc_diversity_cm$overall[4],
+                                       vc_diversity_mc_table$Low_Upper[8],
+                                       vc_diversity_mc_table$Med_Upper[8],
+                                       vc_diversity_mc_table$High_Upper[8],
+                                       vc_ecoc_doms_cm$overall[4],
+                                       vc_ebac_doms_cm$overall[4],
+                                       vc_infx_cm$overall[4]),
+                         sens = c(NA,
+                                  vc_diversity_mc_table$Low_Avg[1],
+                                  vc_diversity_mc_table$Med_Avg[1],
+                                  vc_diversity_mc_table$High_Avg[1],
+                                  vc_ecoc_doms_epi$detail[2][3,],
+                                  vc_ebac_doms_epi$detail[2][3,],
+                                  vc_infx_epi$detail[2][3,]),
+                         sens_lower = c(NA,
+                                        vc_diversity_mc_table$Low_Lower[1],
+                                        vc_diversity_mc_table$Med_Lower[1],
+                                        vc_diversity_mc_table$High_Lower[1],
+                                        vc_ecoc_doms_epi$detail[3][3,],
+                                        vc_ebac_doms_epi$detail[3][3,],
+                                        vc_infx_epi$detail[3][3,]),
+                         sens_upper = c(NA,
+                                        vc_diversity_mc_table$Low_Upper[1],
+                                        vc_diversity_mc_table$Med_Upper[1],
+                                        vc_diversity_mc_table$High_Upper[1],
+                                        vc_ecoc_doms_epi$detail[4][3,],
+                                        vc_ebac_doms_epi$detail[4][3,],
+                                        vc_infx_epi$detail[4][3,]),
+                         spec = c(NA,
+                                  vc_diversity_mc_table$Low_Avg[2],
+                                  vc_diversity_mc_table$Med_Avg[2],
+                                  vc_diversity_mc_table$High_Avg[2],
+                                  vc_ecoc_doms_epi$detail[2][4,],
+                                  vc_ebac_doms_epi$detail[2][4,],
+                                  vc_infx_epi$detail[2][4,]),
+                         spec_lower = c(NA,
+                                       vc_diversity_mc_table$Low_Lower[2],
+                                       vc_diversity_mc_table$Med_Lower[2],
+                                       vc_diversity_mc_table$High_Lower[2],
+                                       vc_ecoc_doms_epi$detail[3][4,],
+                                       vc_ebac_doms_epi$detail[3][4,],
+                                       vc_infx_epi$detail[3][4,]),
+                         spec_upper = c(NA,
+                                       vc_diversity_mc_table$Low_Upper[2],
+                                       vc_diversity_mc_table$Med_Upper[2],
+                                       vc_diversity_mc_table$High_Upper[2],
+                                       vc_ecoc_doms_epi$detail[4][4,],
+                                       vc_ebac_doms_epi$detail[4][4,],
+                                       vc_infx_epi$detail[4][4,]),
+                         odds = c(NA,
+                                  vc_diversity_epi$DOR[1],
+                                  vc_diversity_epi$DOR[2],
+                                  vc_diversity_epi$DOR[3],
+                                  vc_ecoc_doms_epi$detail[2][6,],
+                                  vc_ebac_doms_epi$detail[2][6,],
+                                  vc_infx_epi$detail[2][6,]),
+                         odds_lower = c(NA,
+                                        NA,
+                                        NA,
+                                        NA,
+                                        vc_ecoc_doms_epi$detail[3][6,],
+                                        vc_ebac_doms_epi$detail[3][6,],
+                                        vc_infx_epi$detail[3][6,]),
+                         odds_upper = c(NA,
+                                        NA,
+                                        NA,
+                                        NA,
+                                        vc_ecoc_doms_epi$detail[4][6,],
+                                        vc_ebac_doms_epi$detail[4][6,],
+                                        vc_infx_epi$detail[4][6,])
+                         ) #%>% 
+  # pivot_longer(!c(model, acc_lower, acc_upper, sens_lower, sens_upper, spec_lower, spec_upper, odds_lower, odds_upper), names_to = "metric", values_to = "metric_value") %>% 
+  # filter(is.nan(metric_value)|!is.na(metric_value))
+
+metrics_total <- bind_rows(og_metrics, vc_metrics) %>% 
+  pivot_longer(!c(model, acc_lower, acc_upper, sens_lower, sens_upper, spec_lower, spec_upper, odds_lower, odds_upper), names_to = "metric", values_to = "metric_point") %>% 
+  drop_na(metric_point) %>% 
+  pivot_longer(!c(!ends_with("lower")), names_to = "lower_ci", values_to = "lower_ci_value") %>% 
+  pivot_longer(!c(!ends_with("upper")), names_to = "upper_ci", values_to = "upper_ci_value") %>% 
+  filter(metric == "acc" & lower_ci == "acc_lower" & upper_ci == "acc_upper" |
+         metric == "sens" & lower_ci == "sens_lower" & upper_ci == "sens_upper" |
+         metric == "spec" & lower_ci == "spec_lower" & upper_ci == "spec_upper" #|
+         # metric == "odds" & lower_ci == "odds_lower" & upper_ci == "odds_upper"
+         ) %>% 
+  mutate(cohort = ifelse(grepl(model, pattern = "Internal"), "Internal Validation", "External Validation"),
+         cohort = factor(cohort, levels = c("External Validation", "Internal Validation")),
+         model_simple = gsub(model, pattern = ": External Validation|: Internal Validation", replacement = ""),
+         model_simple = gsub(model_simple, pattern = "\\s", replacement = "\n"),
+         model_simple = factor(model_simple, levels = c(
+           "Diversity\nLow",
+           "Diversity\nMedium",
+           "Diversity\nHigh",
+           "Diversity\nOverall",
+           "Enterococcus\nExpansion",
+           "Enterobacterales\nExpansion",
+           "Infection"
+         )),
+         metric = recode(metric, acc = "Accuracy",
+                         sens = "Sensitivity",
+                         spec = "Specificity"#,
+                         # odds = "Odds Ratio"
+                         ),
+         metric = factor(metric, levels = c("Accuracy",
+                                            "Sensitivity",
+                                            "Specificity"#,
+                                            # "Odds Ratio"
+                                            )))
+  # select(-lower_ci, -upper_ci)
+
+gg_metrics_total <- 
+metrics_total %>% 
+  arrange(desc(cohort)) %>% 
+ggplot(., aes(x = metric_point,
+              y = cohort,
+              color = cohort)) +
+geom_errorbar(aes(xmin = lower_ci_value, xmax = upper_ci_value), lwd = 1) +
+  geom_point(size = 3) +
+  theme_classic2() +
+  theme(panel.grid.minor = eb(),
+        axis.text.x = et(color = "black", size = 16, angle = 45, hjust = 1, vjust = 1),
+        axis.text.y = eb(),
+        axis.ticks.y = eb(),
+        axis.title.x = eb(),
+        axis.title.y = et(color = "black", size = 16),
+        legend.title = et(color = "black", size = 16),
+        legend.text = et(color = "black", size = 14),
+        strip.text.y.left = et(color = "black", size = 16, angle = 0),
+        strip.background.y = er(fill = "white"),
+        strip.text.x = et(color = "black", size = 16),
+        strip.background.x = er(fill = "white"),
+        legend.position = "right", 
+        panel.spacing.x = unit(2.5, "mm"),
+        panel.spacing.y = unit(2, "mm"),
+        panel.border = er(colour = "black", fill = NA, linewidth = 1)) +
+  facet_grid(model_simple~metric, switch = "y") +
+  scale_x_continuous(labels = scales::percent) +
+  scale_color_manual(values = c("#8EDFE8", "#333F48FF")) +
+  guides(color = guide_legend("Model Cohort", reverse = TRUE, ncol = 1)) +
+  # xlab("\nValue") +
+  ylab("Model\n")
+
+gg_metrics_total
+
+ggsave(filename = "./Results/Supplemental_Figure_9.pdf", plot = gg_metrics_total, height = 8, width = 14, units = "in")
+
+# save to CSV
+metrics_total %>% 
+  arrange(metric, model) %>% 
+  write.csv(., file = "./Results/Retrained_sPLSDA_Validation_Metrics.csv", row.names = FALSE)
+```
+
+### Plot Loadings for Validation Cohort: Diversity Groups
+```{r, vc-splsda-diversity-groups, fig.dim = c(14, 10), message=FALSE, warning=FALSE}
+# Take absolute value to make diversity group loadings plot narrower
+tot_diversity_splsda_final$loadings$X <- abs(tot_diversity_splsda_final$loadings$X)
+
+{pdf(file = "./Results/Retrained_Diversity_sPLDSA_Loadings.pdf",
+         height = 8, 
+         width = 11)
+
+par(mfrow = c(1,3))
+
+# Component 1
+plotLoadings(
+  tot_diversity_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 1,
+  legend = FALSE,
+  legend.col = c("#EDE342", "#F69A97", "#FF51EB"),
+  size.name = 1.1,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+# Component 2
+plotLoadings(
+  tot_diversity_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 2,
+  legend.col = c("#EDE342", "#F69A97", "#FF51EB"),
+  size.name = 1.1,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+invisible(dev.off())
+}
+
+par(mfrow = c(1,3))
+
+# Component 1
+plotLoadings(
+  tot_diversity_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 1,
+  legend = FALSE,
+  legend.col = c("#EDE342", "#F69A97", "#FF51EB"),
+  size.name = 0.6,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+# Component 2
+plotLoadings(
+  tot_diversity_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 2,
+  legend.col = c("#EDE342", "#F69A97", "#FF51EB"),
+  size.name = 0.6,
+  size.title = rel(1),
+  ndisplay = 50
+)
+```
+
+### Plot Loadings for Validation Cohort: Enterococcus Expansion
+```{r, vc-splsda-ecoc-domination, fig.dim = c(14, 10), message=FALSE, warning=FALSE}
+# Take absolute value to make diversity group loadings plot narrower
+tot_ecoc_doms_train_splsda_final$loadings$X <- abs(tot_ecoc_doms_train_splsda_final$loadings$X)
+
+{pdf(file = "./Results/Retrained_Enterococcus_Expansion_sPLDSA_Loadings.pdf",
+         height = 8, 
+         width = 11)
+
+par(mfrow = c(1,3))
+
+# Component 1
+plotLoadings(
+  tot_ecoc_doms_train_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 1,
+  legend = FALSE,
+  legend.col = c("#0C7A3A", "black"),
+  size.name = 1.1,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+# Component 2
+plotLoadings(
+  tot_ecoc_doms_train_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 2,
+  legend.col = c("#0C7A3A", "black"),
+  size.name = 1.1,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+invisible(dev.off())}
+
+# Component 1
+plotLoadings(
+  tot_ecoc_doms_train_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 1,
+  legend = FALSE,
+  legend.col = c("#0C7A3A", "black"),
+  size.name = 1.1,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+# Component 2
+plotLoadings(
+  tot_ecoc_doms_train_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 2,
+  legend.col = c("#0C7A3A", "black"),
+  size.name = 1.1,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+```
+
+### Plot Loadings for Validation Cohort: Enterobacterales Expansion
+```{r, vc-splsda-ebac-domination, fig.dim = c(14, 10), message=FALSE, warning=FALSE}
+# Take absolute value to make diversity group loadings plot narrower
+tot_ebac_doms_train_splsda_final$loadings$X <- abs(tot_ebac_doms_train_splsda_final$loadings$X)
+
+{pdf(file = "./Results/Retrained_Enterobacterales_Expansion_sPLDSA_Loadings.pdf",
+         height = 8, 
+         width = 11)
+
+par(mfrow = c(1,3))
+
+# Component 1
+plotLoadings(
+  tot_ebac_doms_train_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 1,
+  legend = FALSE,
+  legend.col = c("#FF0000", "black"),
+  size.name = 1.1,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+# Component 2
+plotLoadings(
+  tot_ebac_doms_train_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 2,
+  legend.col = c("#FF0000", "black"),
+  size.name = 1.1,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+invisible(dev.off())}
+
+ par(mfrow = c(1,3))
+
+# Component 1
+plotLoadings(
+  tot_ebac_doms_train_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 1,
+  legend = FALSE,
+  legend.col = c("#FF0000", "black"),
+  size.name = 0.6,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+# Component 2
+plotLoadings(
+  tot_ebac_doms_train_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 2,
+  legend.col = c("#FF0000", "black"),
+  size.name = 0.6,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+```
+
+### Plot Loadings for Validation Cohort: Any Bacterial Infection
+```{r, vc-splsda-any-infection, fig.dim = c(14, 10), message=FALSE, warning=FALSE}
+# Take absolute value to make diversity group loadings plot narrower
+tot_infx_train_splsda_final$loadings$X <- abs(tot_infx_train_splsda_final$loadings$X)
+
+{pdf(file = "./Results/Retrained_Infection_sPLDSA_Loadings.pdf",
+         height = 8, 
+         width = 11)
+
+par(mfrow = c(1,3))
+
+# Component 1
+plotLoadings(
+  tot_infx_train_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 1,
+  legend = FALSE,
+  legend.col = c("goldenrod", "gray75"),
+  size.name = 1.1,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+# Component 2
+plotLoadings(
+  tot_infx_train_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 2,
+  legend.col = c("goldenrod", "gray75"),
+  size.name = 1.1,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+invisible(dev.off())}
+
+par(mfrow = c(1,3))
+
+# Component 1
+plotLoadings(
+  tot_infx_train_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 1,
+  legend = FALSE,
+  legend.col = c("goldenrod", "gray75"),
+  size.name = 0.6,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+# Component 2
+plotLoadings(
+  tot_infx_train_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 2,
+  legend.col = c("goldenrod", "gray75"),
+  size.name = 0.6,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+```
+
+### Export All Plot Loadings from Re-trained Models
+```{r, export-retrained-splsda-models, message=FALSE, warning=FALSE}
+tot_diversity_loadings_comp1 <- plotLoadings(
+  tot_diversity_splsda_final_copy,
+  contrib = 'max',
+  method = 'mean',
+  legend = FALSE,
+  comp = 1,
+  legend.col = c("#EDE342", "#F69A97", "#FF51EB"),
+  size.name = 1.1,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+tot_diversity_loadings_comp2 <- plotLoadings(
+  tot_diversity_splsda_final_copy,
+  contrib = 'max',
+  method = 'mean',
+  legend = FALSE,
+  comp = 2,
+  legend.col = c("#EDE342", "#F69A97", "#FF51EB"),
+  size.name = 1.1,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+tot_ecoc_loadings_comp1 <- plotLoadings(
+  tot_ecoc_doms_train_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 1,
+  legend.col = c("#0C7A3A", "black"),
+  size.name = 1.1,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+tot_ecoc_loadings_comp2 <- plotLoadings(
+  tot_ecoc_doms_train_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 2,
+  legend.col = c("#0C7A3A", "black"),
+  size.name = 1.1,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+tot_ebac_loadings_comp1 <- plotLoadings(
+  tot_ebac_doms_train_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 1,
+  legend = FALSE,
+  legend.col = c("#FF0000", "black"),
+  size.name = 1.1,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+
+tot_ebac_loadings_comp2 <- plotLoadings(
+  tot_ebac_doms_train_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 2,
+  legend.col = c("#FF0000", "black"),
+  size.name = 1.1,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+tot_infx_loadings_comp1 <- plotLoadings(
+  tot_infx_train_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 1,
+  legend = FALSE,
+  legend.col = c("goldenrod", "gray75"),
+  size.name = 1.1,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+tot_infx_loadings_comp2 <- plotLoadings(
+  tot_infx_train_splsda_final,
+  contrib = 'max',
+  method = 'mean',
+  comp = 2,
+  legend.col = c("goldenrod", "gray75"),
+  size.name = 1.1,
+  size.title = rel(1),
+  ndisplay = 50
+)
+
+
+{
+  # Diversity Component 1
+  wb1 <- 
+  tot_diversity_loadings_comp1 %>%
+    as.data.frame() %>%
+    rename_with( ~ stringr::str_replace(.x,
+                                        pattern = "X\\.",
+                                        replacement = ""),
+                 matches("X.")) %>%
+    rename_with( ~ stringr::str_to_lower(.x)) %>%
+    rownames_to_column(var = "compound") %>%
+    left_join(heatmap_order %>% select(compound, class, subclass)) %>%
+    dplyr::relocate(class, subclass, .after = "compound")
+  
+  # Diversity Component 2
+  wb2 <- 
+  tot_diversity_loadings_comp2 %>%
+    as.data.frame() %>%
+    rename_with( ~ stringr::str_replace(.x,
+                                        pattern = "X\\.",
+                                        replacement = ""),
+                 matches("X.")) %>%
+    rename_with( ~ stringr::str_to_lower(.x)) %>%
+    rownames_to_column(var = "compound") %>%
+    left_join(heatmap_order %>% select(compound, class, subclass)) %>%
+    dplyr::relocate(class, subclass, .after = "compound")
+  
+  # Enterococcus Expansion Component 1
+  wb3 <- 
+  tot_ecoc_loadings_comp1 %>%
+    as.data.frame() %>%
+    rename_with( ~ stringr::str_replace(.x,
+                                        pattern = "X\\.",
+                                        replacement = ""),
+                 matches("X.")) %>%
+    rename_with( ~ stringr::str_to_lower(.x)) %>%
+    rownames_to_column(var = "compound") %>%
+    left_join(heatmap_order %>% select(compound, class, subclass)) %>%
+    dplyr::relocate(class, subclass, .after = "compound")
+  
+  # Enterococcus Expansion Component 2
+  wb4 <- 
+  tot_ecoc_loadings_comp2 %>%
+    as.data.frame() %>%
+    rename_with( ~ stringr::str_replace(.x,
+                                        pattern = "X\\.",
+                                        replacement = ""),
+                 matches("X.")) %>%
+    rename_with( ~ stringr::str_to_lower(.x)) %>%
+    rownames_to_column(var = "compound") %>%
+    left_join(heatmap_order %>% select(compound, class, subclass)) %>%
+    dplyr::relocate(class, subclass, .after = "compound")
+  
+  # Enterobacterales Expansion Component 1
+  wb5 <- 
+  tot_ebac_loadings_comp1 %>%
+    as.data.frame() %>%
+    rename_with( ~ stringr::str_replace(.x,
+                                        pattern = "X\\.",
+                                        replacement = ""),
+                 matches("X.")) %>%
+    rename_with( ~ stringr::str_to_lower(.x)) %>%
+    rownames_to_column(var = "compound") %>%
+    left_join(heatmap_order %>% select(compound, class, subclass)) %>%
+    dplyr::relocate(class, subclass, .after = "compound")
+  
+  # Enterobacterales Expansion Component 2
+  wb6 <- 
+  tot_ebac_loadings_comp2 %>%
+    as.data.frame() %>%
+    rename_with( ~ stringr::str_replace(.x,
+                                        pattern = "X\\.",
+                                        replacement = ""),
+                 matches("X.")) %>%
+    rename_with( ~ stringr::str_to_lower(.x)) %>%
+    rownames_to_column(var = "compound") %>%
+    left_join(heatmap_order %>% select(compound, class, subclass)) %>%
+    dplyr::relocate(class, subclass, .after = "compound")
+  
+  # Any Bacterial Infection Component 1
+  wb7 <- 
+  tot_infx_loadings_comp1 %>%
+    as.data.frame() %>%
+    rename_with( ~ stringr::str_replace(.x,
+                                        pattern = "X\\.",
+                                        replacement = ""),
+                 matches("X.")) %>%
+    rename_with( ~ stringr::str_to_lower(.x)) %>%
+    rownames_to_column(var = "compound") %>%
+    left_join(heatmap_order %>% select(compound, class, subclass)) %>%
+    dplyr::relocate(class, subclass, .after = "compound")
+  
+  # Any Bacterial Infection Component 2
+  wb8 <- 
+  tot_infx_loadings_comp2 %>%
+    as.data.frame() %>%
+    rename_with( ~ stringr::str_replace(.x,
+                                        pattern = "X\\.",
+                                        replacement = ""),
+                 matches("X.")) %>%
+    rename_with( ~ stringr::str_to_lower(.x)) %>%
+    rownames_to_column(var = "compound") %>%
+    left_join(heatmap_order %>% select(compound, class, subclass)) %>%
+    dplyr::relocate(class, subclass, .after = "compound")
+    
+  # Define sheet names for each data frame
+  wb_names <- list("Diversity_1" = wb1, "Diversity_2" = wb2, 
+                     "Enterococcus_Expansion_1" = wb3, "Enterococcus_Expansion_2" = wb4,
+                     "Enterobacterales_Expansion_1" = wb5, "Enterobacterales_Expansion_2" = wb6,
+                      "Infection_1" = wb7,  "Infection_2" = wb8
+                     )
+  # Export each data frame to separate sheets in same Excel file
+  openxlsx::write.xlsx(wb_names, file = "./Results/Retrained_Model_sPLSDA_Loadings.xlsx",
+                       tabColour = c("#EDE342", "#EDE342",
+                                     "#0C7A3A", "#0C7A3A", 
+                                     "#FF0000", "#FF0000",
+                                     "goldenrod", "goldenrod"
+                       ),
+                       zoom = 90
+                       )
+
+  }
+```
+
+### Demographics
+```{r, validation-cohort-demographics, warning=FALSE, message=FALSE}
+## Vector of variables to summarize
+vc_demo_vars <- c("race", "sex", "age", "meld_transplant",
+               "Alcoholic Hepatitis", "Alcoholic Cirrhosis", "NAFLD/NASH", "Primary Sclerosing Cholangitis",
+               "Acute Viral Hepatitis", "Chronic Hepatitis B", "Chronic Hepatitis C",
+               "Autoimmune", "Wilson's Disease", 'Alpha-1 Antitrypsin', "Hemachromatosis", 
+               "Drug Induced Liver Injury or Toxin", "Budd Chiari", "Cryptogenic", "Malignancy", "Other",  "Dialysis",
+               "Pressers", "Mechanical Ventilation")
+## Vector of categorical variables that need transformation
+vc_demo_cats <- c("race", "sex",
+               "Alcoholic Hepatitis", "Alcoholic Cirrhosis", "NAFLD/NASH", "Primary Sclerosing Cholangitis",
+               "Acute Viral Hepatitis", "Chronic Hepatitis B", "Chronic Hepatitis C",
+               "Autoimmune", "Wilson's Disease", 'Alpha-1 Antitrypsin', "Hemachromatosis", 
+               "Drug Induced Liver Injury or Toxin", "Budd Chiari", "Cryptogenic", "Malignancy", "Other",  "Dialysis",
+               "Pressers", "Mechanical Ventilation")
+
+  
+vc_tab1_1 <- CreateTableOne(
+  vars = vc_demo_vars,
+  testNonNormal = "kruskal.test",
+  includeNA = TRUE,
+  factorVars = vc_demo_cats,
+  strata = "any_infection",
+  data = vc_demo
+)
+
+summary(vc_tab1_1) # Age is potentially skewed, need to state that it is skewed and re-run `CreateTableOne`
+vc_tableone_skewed <- c("age", "meld_transplant")
+
+vc_tab1_2 <- print(vc_tab1_1, nonnormal = vc_tableone_skewed, formatOptions = list(big.mark = ","))
+
+write.csv(vc_tab1_2, "./Results/Validation_Cohort_Demo_Table_1.csv", row.names = TRUE) # Saving then reading in the same data allows for an easy way to adjust p-values, since it loads the object as a dataframe
+
+# Need to adjust pvalues and arrange properly....hence the multiple dataframes below
+vc_tab1_2_padjust1 <- read.csv("./Results/Validation_Cohort_Demo_Table_1.csv") %>% 
+  dplyr::rename(" " = X, "No Infection" = X0, "Bacterial Infection" = X1)
+
+vc_tab1_2_padjust2 <- vc_tab1_2_padjust1 %>% 
+  mutate(` ` = factor(` `, levels = vc_tab1_2_padjust1$` `))
+
+vc_tab1_2_padjust3 <- vc_tab1_2_padjust1 %>%
+    mutate(test = ifelse(!is.na(p) & test == "", "chi.sq", test)) %>%
+    group_by(test) %>%
+    rstatix::adjust_pvalue(p.col = "p", method = "BH") %>% 
+    ungroup() %>% 
+    mutate(` ` = factor(` `, vc_tab1_2_padjust2$` `)) %>% 
+    arrange(` `) %>% 
+    mutate(p = ifelse(is.na(p), "", p),
+           p.adj = ifelse(is.na(p.adj), "", p.adj))
+
+# Read in csv to then append adjusted pvalues
+write.csv(vc_tab1_2_padjust3,"./Results/Validation_Cohort_Demo_Table_1_padjust.csv", row.names = FALSE)
+```
+
+### Antibiotics
+```{r, validation-cohort-abx, warning=FALSE, message=FALSE}
+## Vector of variables to summarize
+vc_abx_vars <- c("Basiliximab", "Mycophenolate", "Steroid", "Systemic Vancomycin", "Tacrolimus", "Cefepime", "Metronidazole", "Piperacillin/Tazobactam", "Rifaximin", "Ceftriaxone", "Ciprofloxacin", "Gentamicin", "Tobramicin",
+              "Daptomycin", "Meropenem", "Oral Vancomycin")
+
+vc_abx2 <- vc_abx %>% 
+  filter(grepl(pattern = "basilix|tacro|steroid|mycophenolate|lactulose", medication_name, ignore.case = T)|
+           grepl(pattern = "GLUCOCORTICOIDS|steroid", pharm_class, ignore.case = T)|
+           grepl(pattern = "steroid", pharm_sub_class, ignore.case = T)|
+           grepl("given", mar_action, ignore.case = T)) %>%
+  mutate(Immunosuppressants = case_when(grepl("basilix", medication_name, ignore.case = T) ~ "Basiliximab",
+                              grepl("tacro", medication_name, ignore.case = T) ~ "Tacrolimus",
+                              grepl("one|ide|solu-cortef", medication_name, ignore.case = T) ~ "Steroid",
+                              grepl("mycophenolate", medication_name, ignore.case = T) ~ "Mycophenolate",
+                              grepl("lactulose", medication_name, ignore.case = T) ~ "Lactulose"),
+         Antibiotics = case_when(grepl("rifaximin", medication_name, ignore.case = T) ~ "Rifaximin",
+                              grepl("lactulose", medication_name, ignore.case = T) ~ "Lactulose",
+                              grepl("ceftriaxone", medication_name, ignore.case = T) ~ "Ceftriaxone",
+                              grepl("piperacillin|tazobactam", medication_name, ignore.case = T) ~ "Piperacillin/Tazobactam",
+                              grepl("cefepime", medication_name, ignore.case = T) ~ "Cefepime",
+                              grepl("meropenem", medication_name, ignore.case = T) ~ "Meropenem",
+                              grepl("gentamicin", medication_name, ignore.case = T) ~ "Gentamicin",
+                              grepl("tobramycin", medication_name, ignore.case = T) ~ "Tobramicin",
+                              grepl("vancomycin.+oral", medication_name, ignore.case = T) ~ "Oral Vancomycin",
+                              grepl("vancomycin.+(IV|Intravenous)", medication_name, ignore.case = T) ~ "Systemic Vancomycin",
+                              grepl("METRONIDAZOLE", medication_name, ignore.case = T) ~ "Metronidazole",
+                              grepl("DAPTOMYCIN", medication_name, ignore.case = T) ~ "Daptomycin",
+                              grepl("linezolid", medication_name, ignore.case = T) ~ "Linezolid",
+                              grepl("fluconazole", medication_name, ignore.case = T) ~ "Fluconazole",
+                              grepl("micafungin", medication_name, ignore.case = T) ~ "Micafungin",
+                              grepl("cipro", medication_name, ignore.case = T) & !grepl("drop", dose_units, ignore.case = T) ~ "Ciprofloxacin"),
+         action = case_when(!is.na(Immunosuppressants) & between(days_transplant, 0, 30)|!is.na(Immunosuppressants) & ordering_mode == "Outpatient" ~ "keep",
+                            !is.na(Antibiotics) & between(days_transplant, -14, 1) ~ "keep",
+                            TRUE ~ "remove")) %>% 
+  group_by(patientID, Immunosuppressants, Antibiotics) %>% 
+  arrange(days_transplant) %>% 
+  filter(action == "keep") %>% 
+  dplyr::slice(1) %>% 
+  select(patientID, bact_infection_present, Immunosuppressants, Antibiotics) %>% 
+  # left_join(peri_criteria_all %>% select(patientID, any_infection)) %>% 
+  pivot_longer(!c(patientID, bact_infection_present), names_to = "variable", values_to = "value") %>% 
+  drop_na(value) %>% 
+  mutate(variable = 1) %>% 
+  pivot_wider(id_cols = c(patientID, bact_infection_present), names_from = "value", values_from = "variable", values_fn = min) %>% 
+  replace(is.na(.), 0) %>% 
+  mutate(bact_infection_present = recode(bact_infection_present, `No` = "No Infection",
+                                         `Yes` = "Bacterial Infection"),
+         bact_infection_present = factor(bact_infection_present, levels = c("No Infection", "Bacterial Infection")))
+
+vc_abx_tab1_1 <- CreateTableOne(
+  vars = vc_abx_vars,
+  testNonNormal = "kruskal.test",
+  includeNA = FALSE,
+  factorVars = vc_abx_vars,
+  strata = "bact_infection_present",
+  data = vc_abx2
+)
+
+summary(vc_abx_tab1_1)
+
+vc_abx_tab1_2 <- print(vc_abx_tab1_1, formatOptions = list(big.mark = ","))
+
+write.csv(vc_abx_tab1_2, "./Results/Validation_Cohort_ABX_Table_1.csv", row.names = TRUE) # Saving then reading in the same data allows for an easy way to adjust p-values, since it loads the object as a dataframe
+
+# Need to adjust pvalues and arrange properly....hence the multiple dataframes below
+vc_abx_tab1_2_padjust1 <- read.csv("./Results/Validation_Cohort_ABX_Table_1.csv") %>% 
+  dplyr::rename(" " = X, "Bacterial Infection" = Bacterial.Infection, "No Infection" = `No.Infection`)
+
+vc_abx_tab1_2_padjust2 <- vc_abx_tab1_2_padjust1 %>% 
+  mutate(` ` = factor(` `, levels = vc_abx_tab1_2_padjust1$` `))
+
+vc_abx_tab1_2_padjust3 <- vc_abx_tab1_2_padjust1 %>%
+    mutate(test = ifelse(!is.na(p) & is.na(test), "chi.sq", "")) %>%
+    group_by(test) %>%
+    rstatix::adjust_pvalue(p.col = "p", method = "BH") %>% 
+    ungroup() %>% 
+    mutate(` ` = factor(` `, vc_abx_tab1_2_padjust2$` `)) %>% 
+    arrange(` `) %>% 
+    mutate(p = ifelse(is.na(p), "", p),
+           p.adj = ifelse(is.na(p.adj), "", p.adj))
+
+# Read in csv to then append adjusted pvalues
+write.csv(vc_abx_tab1_2_padjust3, "./Results/Validation_Cohort_ABX_Table_1_padjust.csv", row.names = FALSE)
+```
+
+## Compare cohorts
+### Demographics
+```{r, original-validation-cohorts-demographics, warning=FALSE, message=FALSE}
+demo_cohorts <- vc_demo %>% 
+  mutate(cohort = "Validation") %>% 
+  bind_rows(demo %>% mutate(cohort = "Original"))
+
+
+cohorts_tab1_1 <- CreateTableOne(
+  vars = demo_vars,
+  testNonNormal = "kruskal.test",
+  includeNA = TRUE,
+  factorVars = demo_cats,
+  strata = "cohort",
+  data = demo_cohorts
+)
+
+summary(cohorts_tab1_1) # Age is potentially skewed, need to state that it is skewed and re-run `CreateTableOne`
+cohorts_tableone_skewed <- c("age", "meld_transplant")
+
+cohorts_tab1_2 <- print(cohorts_tab1_1, nonnormal = cohorts_tableone_skewed, formatOptions = list(big.mark = ","))
+
+write.csv(cohorts_tab1_2, "./Results/Both_Cohorts_Demo_Table_1.csv", row.names = TRUE) # Saving then reading in the same data allows for an easy way to adjust p-values, since it loads the object as a dataframe
+
+# Need to adjust pvalues and arrange properly....hence the multiple dataframes below
+cohorts_tab1_2_padjust1 <- read.csv("./Results/Both_Cohorts_Demo_Table_1.csv") %>% 
+  dplyr::rename(" " = X)
+
+cohorts_tab1_2_padjust2 <- cohorts_tab1_2_padjust1 %>% 
+  mutate(` ` = factor(` `, levels = cohorts_tab1_2_padjust1$` `))
+
+cohorts_tab1_2_padjust3 <- cohorts_tab1_2_padjust1 %>%
+    mutate(test = ifelse(!is.na(p) & test == "", "chi.sq", test)) %>%
+    group_by(test) %>%
+    rstatix::adjust_pvalue(p.col = "p", method = "BH") %>% 
+    ungroup() %>% 
+    mutate(` ` = factor(` `, cohorts_tab1_2_padjust2$` `)) %>% 
+    arrange(` `) %>% 
+    mutate(p = ifelse(is.na(p), "", p),
+           p.adj = ifelse(is.na(p.adj), "", p.adj))
+
+# Read in csv to then append adjusted pvalues
+write.csv(cohorts_tab1_2_padjust3,"./Results/Both_Cohorts_Demo_Table_1_padjust.csv", row.names = FALSE)
+```
+
+### Antibiotics
+```{r, original-validation-cohorts-abx, warning=FALSE, message=FALSE}
+cohorts_abx <- vc_abx2 %>% 
+  mutate(cohort = "Validation") %>% 
+  bind_rows(abx2 %>% mutate(cohort = "Original"))
+
+
+cohorts_abx_tab1_1 <- CreateTableOne(
+  vars = abx_vars,
+  testNonNormal = "kruskal.test",
+  includeNA = FALSE,
+  factorVars = abx_vars,
+  strata = "cohort",
+  data = cohorts_abx
+)
+
+summary(cohorts_abx_tab1_1)
+
+cohorts_abx_tab1_2 <- print(cohorts_abx_tab1_1, formatOptions = list(big.mark = ","))
+
+write.csv(cohorts_abx_tab1_2, "./Results/Both_Cohorts_ABX_Table_1.csv", row.names = TRUE) # Saving then reading in the same data allows for an easy way to adjust p-values, since it loads the object as a dataframe
+
+# Need to adjust pvalues and arrange properly....hence the multiple dataframes below
+cohorts_abx_tab1_2_padjust1 <- read.csv("./Results/Both_Cohorts_ABX_Table_1.csv") %>% 
+  dplyr::rename(" " = X)
+
+cohorts_abx_tab1_2_padjust2 <- cohorts_abx_tab1_2_padjust1 %>% 
+  mutate(` ` = factor(` `, levels = cohorts_abx_tab1_2_padjust1$` `))
+
+cohorts_abx_tab1_2_padjust3 <- cohorts_abx_tab1_2_padjust1 %>%
+    mutate(test = ifelse(!is.na(p) & is.na(test), "chi.sq", "")) %>%
+    group_by(test) %>%
+    rstatix::adjust_pvalue(p.col = "p", method = "BH") %>% 
+    ungroup() %>% 
+    mutate(` ` = factor(` `, cohorts_abx_tab1_2_padjust2$` `)) %>% 
+    arrange(` `) %>% 
+    mutate(p = ifelse(is.na(p), "", p),
+           p.adj = ifelse(is.na(p.adj), "", p.adj))
+
+# Read in csv to then append adjusted pvalues
+write.csv(cohorts_abx_tab1_2_padjust3, "./Results/Both_Cohorts_ABX_Table_1_padjust.csv", row.names = FALSE)
 ```
 
 ## Save Data Image

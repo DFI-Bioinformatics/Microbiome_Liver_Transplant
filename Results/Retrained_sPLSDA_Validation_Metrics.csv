@@ -1,0 +1,71 @@
+"model","metric","metric_point","lower_ci","lower_ci_value","upper_ci","upper_ci_value","cohort","model_simple"
+"Diversity High: External Validation","Accuracy",0.89,"acc_lower",0.74,"acc_upper",0.95,"External Validation","Diversity
+High"
+"Diversity High: Internal Validation","Accuracy",0.91,"acc_lower",0.84,"acc_upper",0.95,"Internal Validation","Diversity
+High"
+"Diversity Low: External Validation","Accuracy",0.66,"acc_lower",0.49,"acc_upper",0.79,"External Validation","Diversity
+Low"
+"Diversity Low: Internal Validation","Accuracy",0.81,"acc_lower",0.72,"acc_upper",0.88,"Internal Validation","Diversity
+Low"
+"Diversity Medium: External Validation","Accuracy",0.66,"acc_lower",0.49,"acc_upper",0.79,"External Validation","Diversity
+Medium"
+"Diversity Medium: Internal Validation","Accuracy",0.76,"acc_lower",0.67,"acc_upper",0.83,"Internal Validation","Diversity
+Medium"
+"Diversity Overall: External Validation","Accuracy",0.6,"acc_lower",0.4211177218821,"acc_upper",0.761291889546658,"External Validation","Diversity
+Overall"
+"Diversity Overall: Internal Validation","Accuracy",0.742574257425743,"acc_lower",0.645986554218482,"acc_upper",0.824444436916735,"Internal Validation","Diversity
+Overall"
+"Enterobacterales Expansion: External Validation","Accuracy",0.8,"acc_lower",0.630621155477555,"acc_upper",0.915593983839436,"External Validation","Enterobacterales
+Expansion"
+"Enterobacterales Expansion: Internal Validation","Accuracy",0.803738317757009,"acc_lower",0.715776300413849,"acc_upper",0.874212669674597,"Internal Validation","Enterobacterales
+Expansion"
+"Enterococcus Expansion: External Validation","Accuracy",0.8,"acc_lower",0.630621155477555,"acc_upper",0.915593983839436,"External Validation","Enterococcus
+Expansion"
+"Enterococcus Expansion: Internal Validation","Accuracy",0.803738317757009,"acc_lower",0.715776300413849,"acc_upper",0.874212669674597,"Internal Validation","Enterococcus
+Expansion"
+"Infection: External Validation","Accuracy",0.828571428571429,"acc_lower",0.663501699981803,"acc_upper",0.934378198843749,"External Validation","Infection"
+"Infection: Internal Validation","Accuracy",0.794392523364486,"acc_lower",0.70542263164854,"acc_upper",0.866432976231951,"Internal Validation","Infection"
+"Diversity High: External Validation","Sensitivity",0.75,"sens_lower",0.3,"sens_upper",0.99,"External Validation","Diversity
+High"
+"Diversity High: Internal Validation","Sensitivity",0.95,"sens_lower",0.75,"sens_upper",1,"Internal Validation","Diversity
+High"
+"Diversity Low: External Validation","Sensitivity",0.57,"sens_lower",0.39,"sens_upper",0.73,"External Validation","Diversity
+Low"
+"Diversity Low: Internal Validation","Sensitivity",0.7,"sens_lower",0.55,"sens_upper",0.81,"Internal Validation","Diversity
+Low"
+"Diversity Medium: External Validation","Sensitivity",0.67,"sens_lower",0.21,"sens_upper",0.98,"External Validation","Diversity
+Medium"
+"Diversity Medium: Internal Validation","Sensitivity",0.69,"sens_lower",0.54,"sens_upper",0.81,"Internal Validation","Diversity
+Medium"
+"Enterobacterales Expansion: External Validation","Sensitivity",0.142857142857143,"sens_lower",0.00361029686190062,"sens_upper",0.578723197043195,"External Validation","Enterobacterales
+Expansion"
+"Enterobacterales Expansion: Internal Validation","Sensitivity",0.285714285714286,"sens_lower",0.132236512571125,"sens_upper",0.486668315448941,"Internal Validation","Enterobacterales
+Expansion"
+"Enterococcus Expansion: External Validation","Sensitivity",0.833333333333333,"sens_lower",0.515862251314033,"sens_upper",0.979137474539908,"External Validation","Enterococcus
+Expansion"
+"Enterococcus Expansion: Internal Validation","Sensitivity",0.658536585365854,"sens_lower",0.494052526394267,"sens_upper",0.799165886282918,"Internal Validation","Enterococcus
+Expansion"
+"Infection: External Validation","Sensitivity",0.428571428571429,"sens_lower",0.0989882784425079,"sens_upper",0.815948432359917,"External Validation","Infection"
+"Infection: Internal Validation","Sensitivity",0.444444444444444,"sens_lower",0.254798806631738,"sens_upper",0.646735769677994,"Internal Validation","Infection"
+"Diversity High: External Validation","Specificity",0.9,"spec_lower",0.75,"spec_upper",0.97,"External Validation","Diversity
+High"
+"Diversity High: Internal Validation","Specificity",0.9,"spec_lower",0.82,"spec_upper",0.95,"Internal Validation","Diversity
+High"
+"Diversity Low: External Validation","Specificity",1,"spec_lower",0.65,"spec_upper",1,"External Validation","Diversity
+Low"
+"Diversity Low: Internal Validation","Specificity",0.9,"spec_lower",0.79,"spec_upper",0.95,"Internal Validation","Diversity
+Low"
+"Diversity Medium: External Validation","Specificity",0.66,"spec_lower",0.48,"spec_upper",0.8,"External Validation","Diversity
+Medium"
+"Diversity Medium: Internal Validation","Specificity",0.81,"spec_lower",0.69,"spec_upper",0.89,"Internal Validation","Diversity
+Medium"
+"Enterobacterales Expansion: External Validation","Specificity",0.964285714285714,"spec_lower",0.816522402455376,"spec_upper",0.999096201244342,"External Validation","Enterobacterales
+Expansion"
+"Enterobacterales Expansion: Internal Validation","Specificity",0.987341772151899,"spec_lower",0.931480090513228,"spec_upper",0.999679572765696,"Internal Validation","Enterobacterales
+Expansion"
+"Enterococcus Expansion: External Validation","Specificity",0.782608695652174,"spec_lower",0.562969273763186,"spec_upper",0.925396592351196,"External Validation","Enterococcus
+Expansion"
+"Enterococcus Expansion: Internal Validation","Specificity",0.893939393939394,"spec_lower",0.793606517867613,"spec_upper",0.956281550901407,"Internal Validation","Enterococcus
+Expansion"
+"Infection: External Validation","Specificity",0.928571428571429,"spec_lower",0.764965226825409,"spec_upper",0.991229503296473,"External Validation","Infection"
+"Infection: Internal Validation","Specificity",0.9125,"spec_lower",0.827991661580115,"spec_upper",0.964093641010441,"Internal Validation","Infection"
