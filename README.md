@@ -1,17 +1,17 @@
 # Microbiome in Liver Transplant Infection Manuscript
 
-Code and Data from our manuscript titled "Microbiome compositions and fecal metabolite concentrations predict post-operative infection in liver transplant recipients"
+Code and Data for our manuscript titled "Fecal metabolite profiling identifies liver transplant recipients at risk for postoperative infection"
 
 [![DOI](https://zenodo.org/badge/592530758.svg)](https://zenodo.org/badge/latestdoi/592530758)
 
 ***
-R version 4.2.2 (2022-10-31)
+R version 4.2.3 (2023-03-15)
 
 Platform: x86_64-apple-darwin17.0 (64-bit)
 
-Running under: macOS Monterey 12.2.1
+Running under: macOS Sonoma 14.0
 
-RStudio Version 2022.12.0+353
+RStudio Version 2023.06.1+524
 
 Processor: 2.4 GHz 8-Core Intel Core i9
 
