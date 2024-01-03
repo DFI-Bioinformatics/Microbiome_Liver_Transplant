@@ -4,7 +4,7 @@ Code and Data for our manuscript titled "Fecal metabolite profiling identifies l
 
 Cell Host & Microbe 32, 1–14 (2023)
 
-Published Janary 10, 2024
+Published January 10, 2024
 
 https://doi.org/10.1016/j.chom.2023.11.016
 
