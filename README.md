@@ -2,6 +2,12 @@
 
 Code and Data for our manuscript titled "Fecal metabolite profiling identifies liver transplant recipients at risk for postoperative infection"
 
+Cell Host & Microbe 32, 1–14 (2023)
+
+Published Janary 10, 2024
+
+https://doi.org/10.1016/j.chom.2023.11.016
+
 [![DOI](https://zenodo.org/badge/592530758.svg)](https://zenodo.org/badge/latestdoi/592530758)
 
 ***
